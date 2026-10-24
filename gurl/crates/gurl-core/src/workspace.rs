@@ -305,7 +305,8 @@ pub fn delete(root: &Path, path: &Path) -> Result<()> {
     if path == root {
         return Err(WorkspaceError::RootProtected("delete"));
     }
-    let meta = std::fs::symlink_metadata(&path).map_err(WorkspaceError::io("cannot read", &path))?;
+    let meta =
+        std::fs::symlink_metadata(&path).map_err(WorkspaceError::io("cannot read", &path))?;
     let removed = if meta.is_dir() {
         std::fs::remove_dir_all(&path)
     } else {
@@ -401,7 +402,9 @@ pub fn data_file_relative(hurl_file: &Path, picked: &Path) -> Result<String> {
     let dir = hurl_file.parent().ok_or(WorkspaceError::NoParentDir)?;
     let dir = normalize(dir);
     let picked = normalize(picked);
-    let rel = picked.strip_prefix(&dir).map_err(|_| WorkspaceError::DataFileOutside(dir.clone()))?;
+    let rel = picked
+        .strip_prefix(&dir)
+        .map_err(|_| WorkspaceError::DataFileOutside(dir.clone()))?;
     Ok(rel
         .components()
         .map(|c| c.as_os_str().to_string_lossy().to_string())
@@ -411,7 +414,10 @@ pub fn data_file_relative(hurl_file: &Path, picked: &Path) -> Result<String> {
 
 pub fn check_data_file(hurl_file: &Path, reference: &str) -> DataFileStatus {
     let Some(dir) = hurl_file.parent() else {
-        return DataFileStatus { exists: false, allowed: false };
+        return DataFileStatus {
+            exists: false,
+            allowed: false,
+        };
     };
     let dir = normalize(dir);
     let full = normalize(&dir.join(reference));
@@ -435,8 +441,16 @@ mod tests {
     #[test]
     fn env_roundtrip_with_secret() {
         let vars = vec![
-            EnvVar { name: "host".into(), value: "a.b".into(), secret: false },
-            EnvVar { name: "token".into(), value: "x=y".into(), secret: true },
+            EnvVar {
+                name: "host".into(),
+                value: "a.b".into(),
+                secret: false,
+            },
+            EnvVar {
+                name: "token".into(),
+                value: "x=y".into(),
+                secret: true,
+            },
         ];
         assert_eq!(parse_env(&emit_env(&vars)), vars);
     }

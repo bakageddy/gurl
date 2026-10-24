@@ -1,12 +1,10 @@
-use hurl::http::{
-    CredentialForwarding, FollowLocation, IpResolve, RequestedHttpVersion,
-};
-use hurl::runner::{Output, RunnerOptions, RunnerOptionsBuilder, VariableSet, Value};
-use crate::error::{chain_message, RunError};
-use hurl_core::types::{BytesPerSec, Count};
+use crate::error::{RunError, chain_message};
+use hurl::http::{CredentialForwarding, FollowLocation, IpResolve, RequestedHttpVersion};
+use hurl::runner::{Output, RunnerOptions, RunnerOptionsBuilder, Value, VariableSet};
 use hurl::util::logger::{LoggerOptions, LoggerOptionsBuilder, Verbosity};
 use hurl::util::path::ContextDir;
 use hurl_core::input::Input;
+use hurl_core::types::{BytesPerSec, Count};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -503,7 +501,11 @@ fn inject_response_bodies(json: &mut serde_json::Value, result: &hurl::runner::H
                 .unwrap_or_default();
             let size = body_bytes.len();
             let truncated = size > BODY_PREVIEW_LIMIT;
-            let shown = if truncated { &body_bytes[..BODY_PREVIEW_LIMIT] } else { &body_bytes[..] };
+            let shown = if truncated {
+                &body_bytes[..BODY_PREVIEW_LIMIT]
+            } else {
+                &body_bytes[..]
+            };
             let body_text = String::from_utf8_lossy(shown).to_string();
             if let Some(response_json) = call_json.get_mut("response") {
                 response_json["body"] = serde_json::Value::String(body_text);

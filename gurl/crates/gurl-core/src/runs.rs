@@ -1,8 +1,8 @@
 //! Running scopes (text / file / directory), streaming results to the UI, keeping
 //! history and exporting HURL's own reports.
 
-use crate::hurl::{self, Executed, FileRun, HurlRunOptions, Source, VarSpec};
 use crate::error::RunError;
+use crate::hurl::{self, Executed, FileRun, HurlRunOptions, Source, VarSpec};
 use crate::workspace;
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
@@ -10,7 +10,6 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
-use tauri::ipc::Channel;
 
 const MAX_STORED: usize = 20;
 const MAX_HISTORY: usize = 30;
@@ -115,7 +114,13 @@ fn env_for(root: Option<&Path>, file: &Path) -> Vec<VarSpec> {
 
 impl RunStore {
     pub fn cancel(&self, run_id: &str) {
-        if let Some((_, flag)) = self.cancels.lock().unwrap().iter().find(|(id, _)| id == run_id) {
+        if let Some((_, flag)) = self
+            .cancels
+            .lock()
+            .unwrap()
+            .iter()
+            .find(|(id, _)| id == run_id)
+        {
             flag.store(true, Ordering::SeqCst);
         }
     }
@@ -124,13 +129,16 @@ impl RunStore {
         &self,
         root: Option<PathBuf>,
         req: ScopeRequest,
-        channel: &Channel<RunEvent>,
+        on_event: &(dyn Fn(RunEvent) + Sync),
     ) -> Result<RunSummary, RunError> {
         let started = Instant::now();
         let started_at = now_secs();
         let id = new_run_id();
         let cancel = Arc::new(AtomicBool::new(false));
-        self.cancels.lock().unwrap().push((id.clone(), cancel.clone()));
+        self.cancels
+            .lock()
+            .unwrap()
+            .push((id.clone(), cancel.clone()));
 
         // Job list: (display path, source builder inputs)
         let jobs: Vec<(PathBuf, Option<String>)> = match req.kind.as_str() {
@@ -164,14 +172,13 @@ impl RunStore {
             .iter()
             .map(|(p, _)| p.to_string_lossy().to_string())
             .collect();
-        let _ = channel.send(RunEvent::Started {
+        on_event(RunEvent::Started {
             run_id: id.clone(),
             files: names,
         });
 
         let total = jobs.len();
-        let slots: Vec<Mutex<Option<Outcome>>> =
-            (0..total).map(|_| Mutex::new(None)).collect();
+        let slots: Vec<Mutex<Option<Outcome>>> = (0..total).map(|_| Mutex::new(None)).collect();
         let next = AtomicUsize::new(0);
         let workers = if req.kind == "dir" {
             req.jobs.clamp(1, 16).min(total.max(1))
@@ -181,28 +188,30 @@ impl RunStore {
 
         std::thread::scope(|scope| {
             for _ in 0..workers {
-                scope.spawn(|| loop {
-                    if cancel.load(Ordering::SeqCst) {
-                        break;
+                scope.spawn(|| {
+                    loop {
+                        if cancel.load(Ordering::SeqCst) {
+                            break;
+                        }
+                        let i = next.fetch_add(1, Ordering::SeqCst);
+                        if i >= total {
+                            break;
+                        }
+                        let (path, content) = &jobs[i];
+                        on_event(RunEvent::FileStarted { index: i });
+                        let source = match (req.kind.as_str(), content) {
+                            ("text", Some(c)) => Source::Text(c.clone(), None),
+                            (_, Some(c)) => Source::Text(c.clone(), Some(path.clone())),
+                            _ => Source::File(path.clone()),
+                        };
+                        let env = env_for(root.as_deref(), path);
+                        let out = hurl::run(source, &req.options, &env);
+                        on_event(RunEvent::FileFinished {
+                            index: i,
+                            run: out.0.clone(),
+                        });
+                        *slots[i].lock().unwrap() = Some(out);
                     }
-                    let i = next.fetch_add(1, Ordering::SeqCst);
-                    if i >= total {
-                        break;
-                    }
-                    let (path, content) = &jobs[i];
-                    let _ = channel.send(RunEvent::FileStarted { index: i });
-                    let source = match (req.kind.as_str(), content) {
-                        ("text", Some(c)) => Source::Text(c.clone(), None),
-                        (_, Some(c)) => Source::Text(c.clone(), Some(path.clone())),
-                        _ => Source::File(path.clone()),
-                    };
-                    let env = env_for(root.as_deref(), path);
-                    let out = hurl::run(source, &req.options, &env);
-                    let _ = channel.send(RunEvent::FileFinished {
-                        index: i,
-                        run: out.0.clone(),
-                    });
-                    *slots[i].lock().unwrap() = Some(out);
                 });
             }
         });
@@ -246,7 +255,7 @@ impl RunStore {
         while stored.len() > MAX_STORED {
             stored.pop_front();
         }
-        let _ = channel.send(RunEvent::Done {
+        on_event(RunEvent::Done {
             summary: summary.clone(),
         });
         Ok(summary)
@@ -262,7 +271,13 @@ impl RunStore {
     }
 
     /// Full (untruncated) body of one response, taken from the in-memory result.
-    pub fn response_body(&self, run_id: &str, file: usize, entry: usize, call: usize) -> Result<String, RunError> {
+    pub fn response_body(
+        &self,
+        run_id: &str,
+        file: usize,
+        entry: usize,
+        call: usize,
+    ) -> Result<String, RunError> {
         let stored = self.stored.lock().unwrap();
         let body = stored
             .iter()
@@ -287,7 +302,7 @@ impl RunStore {
             .collect();
         match format {
             "html" => {
-                use ::hurl::report::html::{write_report, Testcase};
+                use ::hurl::report::html::{Testcase, write_report};
                 let mut cases = Vec::new();
                 for ex in &items {
                     let tc = Testcase::from(&ex.result, &ex.input);
@@ -299,7 +314,7 @@ impl RunStore {
                 Ok(dir.join("index.html"))
             }
             "junit" => {
-                use ::hurl::report::junit::{write_report, Testcase};
+                use ::hurl::report::junit::{Testcase, write_report};
                 let cases: Vec<Testcase> = items
                     .iter()
                     .map(|ex| Testcase::from(&ex.result, &ex.content, &ex.input))
@@ -310,7 +325,7 @@ impl RunStore {
                 Ok(file)
             }
             "tap" => {
-                use ::hurl::report::tap::{write_report, Testcase};
+                use ::hurl::report::tap::{Testcase, write_report};
                 let cases: Vec<Testcase> = items
                     .iter()
                     .map(|ex| Testcase::from(&ex.result, &ex.input))
@@ -355,7 +370,10 @@ pub fn save_history(data_dir: &Path, summary: &RunSummary, runs: &[FileRun]) {
         let _ = std::fs::write(history_file(data_dir), t);
     }
     if let Ok(t) = serde_json::to_string(runs) {
-        let _ = std::fs::write(data_dir.join("runs").join(format!("{}.json", summary.id)), t);
+        let _ = std::fs::write(
+            data_dir.join("runs").join(format!("{}.json", summary.id)),
+            t,
+        );
     }
 }
 
@@ -405,7 +423,11 @@ mod tests {
         let _ = std::fs::remove_dir_all(&root);
         let sub = root.join("api").join("v1");
         std::fs::create_dir_all(&sub).unwrap();
-        std::fs::write(root.join("gurl.env"), format!("host=127.0.0.1:{port}\nname=wrong\n")).unwrap();
+        std::fs::write(
+            root.join("gurl.env"),
+            format!("host=127.0.0.1:{port}\nname=wrong\n"),
+        )
+        .unwrap();
         std::fs::write(root.join("api").join("gurl.env"), "name=gurl\n").unwrap();
         std::fs::write(
             sub.join("a.hurl"),
@@ -425,11 +447,11 @@ mod tests {
         let (run_a, ex_a) = hurl::run(Source::File(files[0].clone()), &opts, &env);
         assert!(run_a.ok, "{:?}", run_a.error);
         let asserts = &run_a.report.as_ref().unwrap()["entries"][0]["asserts"];
-        assert!(asserts
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|a| a["source"].as_str().is_some_and(|s| s.starts_with("jsonpath \"$.n\""))));
+        assert!(asserts.as_array().unwrap().iter().any(|a| {
+            a["source"]
+                .as_str()
+                .is_some_and(|s| s.starts_with("jsonpath \"$.n\""))
+        }));
         let (run_b, ex_b) = hurl::run(Source::File(files[1].clone()), &opts, &env);
         assert!(!run_b.ok);
 

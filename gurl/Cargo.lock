@@ -1703,8 +1703,7 @@ dependencies = [
 name = "gurl"
 version = "0.4.0"
 dependencies = [
- "hurl",
- "hurl_core",
+ "gurl-core",
  "notify",
  "notify-debouncer-mini",
  "serde",
@@ -1715,6 +1714,17 @@ dependencies = [
  "tauri-plugin-opener",
  "thiserror 2.0.21",
  "window-vibrancy",
+]
+
+[[package]]
+name = "gurl-core"
+version = "0.4.0"
+dependencies = [
+ "hurl",
+ "hurl_core",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
 ]
 
 [[package]]

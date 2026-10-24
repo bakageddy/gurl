@@ -8,15 +8,10 @@ use tauri::{command, AppHandle, Emitter, Manager, State};
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_opener::OpenerExt;
 
-mod emit;
 mod error;
-mod hurl;
-mod model;
-mod parse;
-mod runs;
-mod workspace;
 
 use error::{Error, Result};
+use gurl_core::{emit, model, parse, runs, workspace};
 use workspace::{EffectiveVar, EnvVar, Node};
 
 #[derive(Default)]
@@ -28,11 +23,7 @@ struct AppState {
 
 impl AppState {
     fn root(&self) -> Result<PathBuf> {
-        self.root
-            .lock()
-            .unwrap()
-            .clone()
-            .ok_or(Error::NoWorkspace)
+        self.root.lock().unwrap().clone().ok_or(Error::NoWorkspace)
     }
 }
 
@@ -166,7 +157,11 @@ fn get_dir_vars(state: State<'_, AppState>, dir: String) -> Result<Vec<EnvVar>> 
 
 #[command]
 fn set_dir_vars(state: State<'_, AppState>, dir: String, vars: Vec<EnvVar>) -> Result<()> {
-    Ok(workspace::write_env(&state.root()?, Path::new(&dir), &vars)?)
+    Ok(workspace::write_env(
+        &state.root()?,
+        Path::new(&dir),
+        &vars,
+    )?)
 }
 
 #[command]
@@ -176,7 +171,11 @@ fn get_env_text(state: State<'_, AppState>, dir: String) -> Result<String> {
 
 #[command]
 fn set_env_text(state: State<'_, AppState>, dir: String, text: String) -> Result<()> {
-    Ok(workspace::write_env_text(&state.root()?, Path::new(&dir), &text)?)
+    Ok(workspace::write_env_text(
+        &state.root()?,
+        Path::new(&dir),
+        &text,
+    )?)
 }
 
 #[command]
@@ -223,7 +222,11 @@ async fn open_file_dialog(app: AppHandle) -> Result<Option<String>> {
 
 #[command]
 async fn open_folder_dialog(app: AppHandle) -> Result<Option<String>> {
-    Ok(app.dialog().file().blocking_pick_folder().map(|p| p.to_string()))
+    Ok(app
+        .dialog()
+        .file()
+        .blocking_pick_folder()
+        .map(|p| p.to_string()))
 }
 
 /// Lets the user choose a data file for a multipart part / body. The file must live in the
@@ -239,7 +242,9 @@ async fn pick_data_file(app: AppHandle, hurl_path: String) -> Result<Option<Stri
     let Some(picked) = dialog.blocking_pick_file() else {
         return Ok(None);
     };
-    let picked = picked.into_path().map_err(|e| Error::NotLocalPath(Box::new(e)))?;
+    let picked = picked
+        .into_path()
+        .map_err(|e| Error::NotLocalPath(Box::new(e)))?;
     Ok(Some(workspace::data_file_relative(&hurl, &picked)?))
 }
 
@@ -260,7 +265,9 @@ async fn run_scope(
     tauri::async_runtime::spawn_blocking(move || {
         let state = handle.state::<AppState>();
         let root = state.root.lock().unwrap().clone();
-        let summary = state.runs.execute(root, request, &on_event)?;
+        let summary = state.runs.execute(root, request, &|e| {
+            let _ = on_event.send(e);
+        })?;
         if let (Ok(dir), Some(runs)) = (data_dir(&handle), state.runs.file_runs(&summary.id)) {
             runs::save_history(&dir, &summary, &runs);
         }
@@ -313,7 +320,9 @@ fn export_report(
 ) -> Result<String> {
     let target = match dir {
         Some(d) => PathBuf::from(d),
-        None => data_dir(&app)?.join("exports").join(format!("{run_id}-{format}")),
+        None => data_dir(&app)?
+            .join("exports")
+            .join(format!("{run_id}-{format}")),
     };
     let _ = std::fs::remove_dir_all(&target);
     let file = state.runs.export(&run_id, &format, &target)?;

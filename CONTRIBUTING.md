@@ -58,14 +58,19 @@ gurl/
     lib/hurl-schema.ts      tables that drive the builder forms (queries, filters, predicates, options)
     lib/stores/*.svelte.ts  state: workspace, tabs (model <-> text sync), runs, settings, ui
     components/             Titlebar/chrome, Sidebar, DocView, builder/*, run/*, VarsPanel
-  src-tauri/src/
+  Cargo.toml                cargo workspace (version lives here, in [workspace.package])
+  crates/gurl-core/src/     the engine, no GUI dependency (shared by the app and the CLI)
     parse.rs / emit.rs      HURL text <-> structured model (model.rs) for the visual builder
     workspace.rs            workspace tree, gurl.env variable inheritance, file ops, 255-level limit
     runs.rs                 run scopes (text/file/dir), streaming, history, HURL report export
     hurl.rs                 runner options + one run, built on the hurl crate
+    error.rs                WorkspaceError / RunError (thiserror)
+  crates/gurl-core/fixtures/ HURL files used by the round-trip tests
+  src-tauri/src/
     lib.rs                  Tauri commands, app state, file watcher
-  src-tauri/fixtures/       HURL files used by the round-trip tests
+    error.rs                the command error type (serialises to the message the UI shows)
   vendor/hurl/              HURL source (git submodule, tag 8.0.1)
+  stubs/winres/             no-op winres so HURL's Windows resource doesn't collide with Tauri's
 assets/                     app icon source (icon.svg -> icon-1024.png)
 packaging/                  desktop entry and Arch PKGBUILD
 ```
@@ -77,7 +82,7 @@ packaging/                  desktop entry and Arch PKGBUILD
   scenarios and all sub-folders; deeper folders override shallower ones.
 - **Builder <-> text**: both views edit one model. `parse_hurl` turns text into the model, `emit_hurl` turns it
   back. Leaf values stay raw HURL source, so `{{templates}}` and quoting survive. If you add support for new
-  syntax, extend `model.rs`, `parse.rs`, `emit.rs` **and** add it to `src-tauri/fixtures/all.hurl`; the
+  syntax, extend `model.rs`, `parse.rs`, `emit.rs` **and** add it to `crates/gurl-core/fixtures/all.hurl`; the
   round-trip test fails if anything is lost.
 - **Data files** (multipart parts, `file,...;` bodies) must live in the scenario's folder or a sub-folder
   (HURL's file root). The builder's picker and the runner both enforce this.
@@ -89,10 +94,9 @@ cd gurl
 npm run check                       # svelte-check / TypeScript
 npm run build                       # production frontend build
 
-cd src-tauri
-cargo test --lib                    # unit + round-trip + run/export tests
-cargo clippy --lib --tests -- -D warnings
-cargo fmt
+cargo test --workspace              # unit + round-trip + run/export tests
+cargo clippy --workspace --all-targets -- -D warnings
+cargo fmt --all
 ```
 
 CI runs the same checks on Ubuntu 22.04/24.04, macOS and Windows (`.github/workflows/ci.yml`).
@@ -109,7 +113,7 @@ CI runs the same checks on Ubuntu 22.04/24.04, macOS and Windows (`.github/workf
 
 ## Releases
 
-Releases are cut by tag. Bump the version in `gurl/package.json`, `gurl/src-tauri/Cargo.toml` and
+Releases are cut by tag. Bump the version in `gurl/package.json`, `gurl/Cargo.toml` (`[workspace.package]`) and
 `gurl/src-tauri/tauri.conf.json`, then:
 
 ```sh
@@ -135,7 +139,7 @@ cd gurl/vendor/hurl && git fetch --depth 1 origin tag <new-version> && git check
 cd ../.. && git add vendor/hurl
 ```
 
-Then fix any API changes in `src-tauri/src/hurl.rs` and `parse.rs`, and update the tag in `packaging/arch/PKGBUILD`.
+Then fix any API changes in `crates/gurl-core/src/hurl.rs` and `parse.rs`, and update the tag in `packaging/arch/PKGBUILD`.
 
 ## App icon
 

@@ -22,7 +22,11 @@ fn slice(lines: &[&str], info: SourceInfo) -> String {
     for ln in sl..=el.min(lines.len()) {
         let line = lines[ln - 1];
         let from = if ln == sl { sc.saturating_sub(1) } else { 0 };
-        let to = if ln == el { ec.saturating_sub(1) } else { usize::MAX };
+        let to = if ln == el {
+            ec.saturating_sub(1)
+        } else {
+            usize::MAX
+        };
         let piece: String = line
             .chars()
             .skip(from)

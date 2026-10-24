@@ -93,7 +93,7 @@ jobs:
       # Caches target/ per matrix leg -- see the design notes for the E0463 this prevents.
       - uses: swatinem/rust-cache@v2
         with:
-          workspaces: gurl/src-tauri
+          workspaces: gurl
           key: ${{ matrix.label }}
 
       - name: install linux system deps
@@ -156,8 +156,8 @@ jobs:
           set -e
           shopt -s nullglob
           mkdir -p out
-          for f in gurl/src-tauri/target/release/bundle/deb/*.deb \
-                   gurl/src-tauri/target/release/bundle/appimage/*.AppImage; do
+          for f in gurl/target/release/bundle/deb/*.deb \
+                   gurl/target/release/bundle/appimage/*.AppImage; do
             base="$(basename "$f")"
             cp "$f" "out/${base%.*}_${{ matrix.platform }}.${base##*.}"
           done
@@ -210,7 +210,7 @@ jobs:
           git config --global --add safe.directory "$GITHUB_WORKSPACE" || true
           shopt -s nullglob
           mkdir -p out
-          for f in gurl/src-tauri/target/release/bundle/rpm/*.rpm; do
+          for f in gurl/target/release/bundle/rpm/*.rpm; do
             base="$(basename "$f")"
             cp "$f" "out/${base%.rpm}_fedora-42.rpm"
           done
@@ -253,7 +253,7 @@ jobs:
           set -e
           git config --global --add safe.directory "$GITHUB_WORKSPACE" || true
           mkdir -p pkg/gurl out
-          install -m755 gurl/src-tauri/target/release/gurl pkg/gurl/gurl
+          install -m755 gurl/target/release/gurl pkg/gurl/gurl
           install -m644 gurl/src-tauri/icons/128x128.png pkg/gurl/gurl.png
           install -m644 packaging/gurl.desktop pkg/gurl/gurl.desktop
           tar -C pkg -czf "out/gurl_${TAG#v}_x86_64_arch.tar.gz" gurl

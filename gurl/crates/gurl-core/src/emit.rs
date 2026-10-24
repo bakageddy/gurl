@@ -134,7 +134,12 @@ pub fn emit(doc: &HurlDoc) -> String {
                 section(&mut out, "Asserts");
                 for a in &resp.asserts {
                     let not = if a.not { "not" } else { "" };
-                    out.push_str(&join(&[&query(&a.query, &a.filters), not, &a.func, &a.value]));
+                    out.push_str(&join(&[
+                        &query(&a.query, &a.filters),
+                        not,
+                        &a.func,
+                        &a.value,
+                    ]));
                     out.push('\n');
                 }
             }

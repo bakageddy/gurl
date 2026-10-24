@@ -1,0 +1,29 @@
+[workspace]
+members = ["src-tauri", "crates/gurl-core"]
+default-members = ["src-tauri"]
+exclude = ["vendor", "stubs"]
+resolver = "2"
+
+[workspace.package]
+version = "0.4.0"
+edition = "2021"
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+hurl = { path = "vendor/hurl/packages/hurl" }
+hurl_core = { path = "vendor/hurl/packages/hurl_core" }
+gurl-core = { path = "crates/gurl-core" }
+
+# HURL's build.rs embeds its own Windows icon/version resource, which collides with Tauri's at link
+# time (duplicate VERSION resource). Replace the winres helper with a no-op; see stubs/winres.
+[patch.crates-io]
+winres = { path = "stubs/winres" }
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = 3
+panic = "abort"
+strip = true

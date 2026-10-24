@@ -1,0 +1,13 @@
+[package]
+name = "gurl-core"
+version.workspace = true
+# Edition 2024 so that sources from the vendored hurl crate (edition 2024) can be `#[path]`-included.
+edition = "2024"
+description = "gURL engine: HURL model, workspaces, runs and reports (no GUI)"
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+hurl.workspace = true
+hurl_core.workspace = true

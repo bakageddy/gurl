@@ -61,7 +61,7 @@ jobs:
 
       - uses: swatinem/rust-cache@v2
         with:
-          workspaces: gurl/src-tauri
+          workspaces: gurl
           key: ${{ matrix.platform }}
 
       - name: install linux system deps
@@ -94,9 +94,9 @@ jobs:
         run: mkdir -p gurl/dist && touch gurl/dist/index.html
 
       - name: test
-        run: cargo test --lib -- --nocapture
-        working-directory: gurl/src-tauri
+        run: cargo test --workspace -- --nocapture
+        working-directory: gurl
 
       - name: clippy
-        run: cargo clippy --lib -- -D warnings
-        working-directory: gurl/src-tauri
+        run: cargo clippy --workspace --all-targets -- -D warnings
+        working-directory: gurl

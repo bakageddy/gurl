@@ -4,7 +4,7 @@
 pkgname=gurl
 pkgver=0.4.0
 pkgrel=1
-pkgdesc='A native-feeling GUI for HURL: workspaces, a visual request builder and reports'
+pkgdesc='A GUI for HURL: workspaces, a visual request builder and reports'
 arch=('x86_64')
 url='https://github.com/bakageddy/gurl'
 license=('MIT')
@@ -28,7 +28,7 @@ build() {
 
 package() {
   cd "$pkgname-$pkgver"
-  install -Dm755 gurl/src-tauri/target/release/gurl "$pkgdir/usr/bin/gurl"
+  install -Dm755 gurl/target/release/gurl "$pkgdir/usr/bin/gurl"
   install -Dm644 packaging/gurl.desktop "$pkgdir/usr/share/applications/gurl.desktop"
   install -Dm644 gurl/src-tauri/icons/128x128.png "$pkgdir/usr/share/icons/hicolor/128x128/apps/gurl.png"
 }
