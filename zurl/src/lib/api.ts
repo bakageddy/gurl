@@ -32,6 +32,9 @@ export const duplicatePath = (path: string) => invoke<string>("duplicate_path", 
 export const getDirVars = (dir: string) => invoke<EnvVar[]>("get_dir_vars", { dir });
 export const setDirVars = (dir: string, vars: EnvVar[]) =>
   invoke<void>("set_dir_vars", { dir, vars });
+export const getEnvText = (dir: string) => invoke<string>("get_env_text", { dir });
+export const setEnvText = (dir: string, text: string) =>
+  invoke<void>("set_env_text", { dir, text });
 export const getEffectiveVars = (dir: string) =>
   invoke<EffectiveVar[]>("get_effective_vars", { dir });
 

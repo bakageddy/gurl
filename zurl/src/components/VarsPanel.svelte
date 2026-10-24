@@ -1,7 +1,8 @@
 <script lang="ts">
   import { untrack } from "svelte";
   import Icon from "./Icon.svelte";
-  import { getDirVars, getEffectiveVars, setDirVars } from "../lib/api";
+  import { getDirVars, getEffectiveVars, getEnvText, setDirVars, setEnvText } from "../lib/api";
+  import LazyEditor from "./LazyEditor.svelte";
   import { depthOf } from "../lib/actions";
   import { basename, debounce, relative } from "../lib/format";
   import { workspace } from "../lib/stores/workspace.svelte";
@@ -14,6 +15,8 @@
   let effective = $state<EffectiveVar[]>([]);
   let loaded = $state(false);
   let saving = $state(false);
+  let mode = $state<"table" | "text">("table");
+  let text = $state("");
 
   const localNames = $derived(new Set(local.map((v) => v.name.trim()).filter(Boolean)));
   const inherited = $derived(effective.filter((v) => !localNames.has(v.name)));
@@ -23,6 +26,7 @@
     try {
       local = await getDirVars(dir);
       effective = await getEffectiveVars(dir);
+      text = await getEnvText(dir);
       loaded = true;
     } catch (e) {
       ui.error(e);
@@ -47,6 +51,31 @@
     }
   }, 500);
 
+  const saveText = debounce(async () => {
+    saving = true;
+    try {
+      await setEnvText(dir, text);
+      effective = await getEffectiveVars(dir);
+      local = await getDirVars(dir);
+      await workspace.refresh([dir.slice(0, Math.max(dir.lastIndexOf("/"), dir.lastIndexOf("\\")))]);
+    } catch (e) {
+      ui.error(e);
+    } finally {
+      saving = false;
+    }
+  }, 500);
+
+  async function setMode(m: "table" | "text") {
+    if (m === mode) return;
+    save.cancel();
+    saveText.cancel();
+    // flush whatever was being edited, then reload from disk so both views agree
+    if (mode === "table") await setDirVars(dir, $state.snapshot(local));
+    else await setEnvText(dir, text);
+    await load();
+    mode = m;
+  }
+
   function add(name = "", value = "") {
     local.push({ name, value, secret: false });
     save();
@@ -60,6 +89,10 @@
 
 <div class="vars">
   <header>
+    <div class="segmented">
+      <button class:active={mode === "table"} onclick={() => setMode("table")}>Table</button>
+      <button class:active={mode === "text"} onclick={() => setMode("text")}>zurl.env</button>
+    </div>
     <div>
       <h2>Variables</h2>
       <p class="muted">
@@ -74,6 +107,17 @@
     redacted in logs and reports.
   </p>
 
+  {#if mode === "text"}
+    <h3 class="label">zurl.env</h3>
+    <p class="hint muted">
+      One <code>name=value</code> per line. A <code># @secret</code> comment line marks the next variable as a secret.
+    </p>
+    <div class="cm">
+      <LazyEditor value={text} lang="plain" placeholder={"host=https://api.example.org\n# @secret\ntoken=abc123"} onchange={(v) => { text = v; saveText(); }} />
+    </div>
+  {/if}
+
+  {#if mode === "table"}
   <h3 class="label">This folder</h3>
   <div class="table" oninput={() => save()} onchange={() => save()}>
     {#if loaded && local.length === 0}<p class="subtle empty">No variables defined here yet.</p>{/if}
@@ -90,6 +134,8 @@
     {/each}
     <button class="btn sm add" onclick={() => add()}><Icon name="plus" size={12} /> Variable</button>
   </div>
+
+  {/if}
 
   {#if inherited.length}
     <h3 class="label">Inherited from parent folders</h3>
@@ -117,6 +163,16 @@
     margin: 0;
     font-size: 18px;
     font-weight: 600;
+  }
+  header {
+    display: grid;
+    gap: 12px;
+  }
+  .cm {
+    height: 260px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
   }
   header p {
     margin: 2px 0 0;

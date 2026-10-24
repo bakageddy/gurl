@@ -110,7 +110,11 @@
           {#each entry.asserts as a}
             <li class:bad={!a.success}>
               <Icon name={a.success ? "check" : "x"} size={13} />
-              <span>line {a.line}{#if a.message}<pre class="mono msg">{a.message}</pre>{:else} passed{/if}</span>
+              <div class="a-main">
+                <code class="cond mono">{a.source ?? `line ${a.line}`}</code>
+                {#if a.message}<pre class="mono msg">{a.message}</pre>{/if}
+              </div>
+              <span class="ln subtle">line {a.line}</span>
             </li>
           {/each}
         </ul>
@@ -242,8 +246,17 @@
   .asserts li.bad {
     color: var(--danger);
   }
-  .asserts li span {
+  .a-main {
+    flex: 1;
+    min-width: 0;
     color: var(--fg);
+  }
+  .cond {
+    word-break: break-all;
+  }
+  .ln {
+    font-size: 11px;
+    flex: none;
   }
   .msg {
     margin: 4px 0 0;

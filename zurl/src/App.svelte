@@ -75,14 +75,14 @@
 <svelte:window onkeydown={onKey} />
 
 <div class="app">
-  <Titlebar onToggleSidebar={() => (sidebarOpen = !sidebarOpen)} />
-  <div class="body" style:grid-template-columns={sidebarOpen ? `${settings.sidebarWidth}px 1fr` : "1fr"}>
-    {#if sidebarOpen}
-      <div class="side">
-        <Sidebar />
+  <Titlebar />
+  <div class="body" style:grid-template-columns="{sidebarOpen ? settings.sidebarWidth : 44}px 1fr">
+    <div class="side">
+      <Sidebar collapsed={!sidebarOpen} ontoggle={() => (sidebarOpen = !sidebarOpen)} />
+      {#if sidebarOpen}
         <div class="grip" role="separator" aria-orientation="vertical" onpointerdown={startSidebarDrag}></div>
-      </div>
-    {/if}
+      {/if}
+    </div>
     <main>
       <div class="tabbar" role="tablist">
         {#each tabs.list as t (t.id)}

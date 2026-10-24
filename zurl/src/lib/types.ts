@@ -201,7 +201,7 @@ export interface HurlCall {
 export interface HurlEntryReport {
   index: number;
   line: number;
-  asserts: Array<{ success: boolean; line: number; message?: string }>;
+  asserts: Array<{ success: boolean; line: number; message?: string; source?: string }>;
   captures: Array<{ name: string; value: unknown }>;
   calls: HurlCall[];
   time: number;

@@ -420,6 +420,12 @@ mod tests {
         let opts = HurlRunOptions::default();
         let (run_a, ex_a) = hurl::run(Source::File(files[0].clone()), &opts, &env);
         assert!(run_a.ok, "{:?}", run_a.error);
+        let asserts = &run_a.report.as_ref().unwrap()["entries"][0]["asserts"];
+        assert!(asserts
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|a| a["source"].as_str().is_some_and(|s| s.starts_with("jsonpath \"$.n\""))));
         let (run_b, ex_b) = hurl::run(Source::File(files[1].clone()), &opts, &env);
         assert!(!run_b.ok);
 

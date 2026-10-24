@@ -2,13 +2,9 @@
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import Icon from "./Icon.svelte";
   import { nativeChrome } from "../lib/platform";
-  import { settings } from "../lib/stores/settings.svelte";
-  import { ui } from "../lib/stores/ui.svelte";
   import { workspace } from "../lib/stores/workspace.svelte";
   import { tabs } from "../lib/stores/tabs.svelte";
   import { basename } from "../lib/format";
-
-  let { onToggleSidebar }: { onToggleSidebar: () => void } = $props();
 
   const win = getCurrentWindow();
   const title = $derived(
@@ -16,15 +12,6 @@
       .filter(Boolean)
       .join("  —  ") || "Zurl",
   );
-
-  const isDark = $derived(
-    settings.theme === "dark" ||
-      (settings.theme === "system" && matchMedia("(prefers-color-scheme: dark)").matches),
-  );
-  function toggleTheme() {
-    settings.theme = isDark ? "light" : "dark";
-    settings.save();
-  }
 </script>
 
 <header class="titlebar" role="presentation" class:native={nativeChrome} data-tauri-drag-region ondblclick={() => !nativeChrome && win.toggleMaximize()}>
@@ -37,16 +24,7 @@
   {:else}
     <div class="native-gap" data-tauri-drag-region></div>
   {/if}
-  <button class="icon-btn" title="Toggle sidebar" onclick={onToggleSidebar}><Icon name="list" size={15} /></button>
   <div class="title" data-tauri-drag-region>{title}</div>
-  <div class="actions">
-    <button class="icon-btn" title={isDark ? "Light theme" : "Dark theme"} onclick={toggleTheme}>
-      <Icon name={isDark ? "sun" : "moon"} size={15} />
-    </button>
-    <button class="icon-btn" title="Run settings" onclick={() => (ui.settingsOpen = true)}>
-      <Icon name="gear" size={15} />
-    </button>
-  </div>
 </header>
 
 <style>
@@ -109,9 +87,5 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     pointer-events: none;
-  }
-  .actions {
-    display: flex;
-    gap: 2px;
   }
 </style>

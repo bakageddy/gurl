@@ -304,6 +304,7 @@ pub fn run(
         Err(e) => return fail(format!("failed to serialize report: {e}")),
     };
     inject_response_bodies(&mut report, &result);
+    inject_assert_sources(&mut report, &content);
 
     let file_run = FileRun {
         path: label,
@@ -503,6 +504,26 @@ fn inject_response_bodies(json: &mut serde_json::Value, result: &hurl::runner::H
                 response_json["body"] = serde_json::Value::String(body_text);
                 response_json["bodySize"] = serde_json::Value::from(size);
                 response_json["bodyTruncated"] = serde_json::Value::Bool(truncated);
+            }
+        }
+    }
+}
+
+/// HURL's report only has the line number of each assert. Add the text of that line so the UI
+/// can show the condition itself (`jsonpath "$.id" == 1`, `HTTP 200`, ...).
+fn inject_assert_sources(json: &mut serde_json::Value, content: &str) {
+    let lines: Vec<&str> = content.lines().collect();
+    let Some(entries) = json.get_mut("entries").and_then(|e| e.as_array_mut()) else {
+        return;
+    };
+    for entry in entries {
+        let Some(asserts) = entry.get_mut("asserts").and_then(|a| a.as_array_mut()) else {
+            continue;
+        };
+        for a in asserts {
+            let line = a.get("line").and_then(|l| l.as_u64()).unwrap_or(0) as usize;
+            if let Some(text) = line.checked_sub(1).and_then(|i| lines.get(i)) {
+                a["source"] = serde_json::Value::String(text.trim().to_string());
             }
         }
     }

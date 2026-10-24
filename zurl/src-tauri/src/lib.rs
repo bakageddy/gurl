@@ -168,6 +168,16 @@ fn set_dir_vars(state: State<'_, AppState>, dir: String, vars: Vec<EnvVar>) -> R
 }
 
 #[command]
+fn get_env_text(state: State<'_, AppState>, dir: String) -> Result<String, String> {
+    workspace::read_env_text(&state.root()?, Path::new(&dir))
+}
+
+#[command]
+fn set_env_text(state: State<'_, AppState>, dir: String, text: String) -> Result<(), String> {
+    workspace::write_env_text(&state.root()?, Path::new(&dir), &text)
+}
+
+#[command]
 fn get_effective_vars(state: State<'_, AppState>, dir: String) -> Result<Vec<EffectiveVar>, String> {
     workspace::effective_vars(&state.root()?, Path::new(&dir))
 }
@@ -365,6 +375,8 @@ pub fn run() {
             duplicate_path,
             get_dir_vars,
             set_dir_vars,
+            get_env_text,
+            set_env_text,
             get_effective_vars,
             read_text_file,
             write_text_file,

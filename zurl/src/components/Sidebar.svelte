@@ -4,6 +4,7 @@
   import { tabs } from "../lib/stores/tabs.svelte";
   import { runs } from "../lib/stores/runs.svelte";
   import { ui, type MenuItem } from "../lib/stores/ui.svelte";
+  import { settings } from "../lib/stores/settings.svelte";
   import { basename, timeAgo, ms } from "../lib/format";
   import {
     deleteEntry,
@@ -15,6 +16,21 @@
     runDirectory,
     runFilePath,
   } from "../lib/actions";
+
+  interface Props {
+    collapsed: boolean;
+    ontoggle: () => void;
+  }
+  let { collapsed, ontoggle }: Props = $props();
+
+  const systemDark = matchMedia("(prefers-color-scheme: dark)");
+  let systemIsDark = $state(systemDark.matches);
+  systemDark.addEventListener("change", (e) => (systemIsDark = e.matches));
+  const isDark = $derived(settings.theme === "dark" || (settings.theme === "system" && systemIsDark));
+  function toggleTheme() {
+    settings.theme = isDark ? "light" : "dark";
+    settings.save();
+  }
 
   const ROW_H = 26;
   let view = $state<"files" | "history">("files");
@@ -76,7 +92,8 @@
   }
 </script>
 
-<aside class="sidebar">
+<aside class="sidebar" class:collapsed>
+  {#if !collapsed}
   <div class="head">
     <div class="segmented">
       <button class:active={view === "files"} onclick={() => (view = "files")}>Files</button>
@@ -91,11 +108,14 @@
 
   {#if view === "files"}
     {#if workspace.root}
+      <div class="root-wrap">
       <button class="root" oncontextmenu={rootMenu} onclick={() => (workspace.selected = workspace.root)} title={workspace.root}>
         <Icon name="folder-open" size={13} />
         <span>{basename(workspace.root)}</span>
         <span class="subtle mono">{total}</span>
       </button>
+      <button class="icon-btn" title="Workspace variables (zurl.env)" onclick={() => tabs.openVars(workspace.root!)}><Icon name="key" size={13} /></button>
+      </div>
       <div
         class="tree"
         bind:this={scroller}
@@ -126,8 +146,13 @@
                 <span class="chev"></span><Icon name="file" size={14} class="ic" />
               {/if}
               <span class="name">{r.node.name}</span>
-              {#if r.node.kind === "dir" && r.node.hasEnv}
-                <span class="env-dot" title="Has variables (zurl.env)"></span>
+              {#if r.node.kind === "dir"}
+                <button
+                  class="icon-btn vars-btn"
+                  class:has={r.node.hasEnv}
+                  title={r.node.hasEnv ? "Edit variables (zurl.env)" : "Add variables (zurl.env)"}
+                  onclick={(e) => { e.stopPropagation(); tabs.openVars(r.node.path); }}
+                ><Icon name="key" size={12} /></button>
               {/if}
             </div>
           {/each}
@@ -158,6 +183,20 @@
       {/each}
     </div>
   {/if}
+  {/if}
+
+  <footer class="footer">
+    <button class="icon-btn" title={collapsed ? "Show sidebar (Ctrl/Cmd+B)" : "Hide sidebar (Ctrl/Cmd+B)"} onclick={ontoggle}>
+      <Icon name="sidebar" size={16} />
+    </button>
+    <span class="grow"></span>
+    <button class="icon-btn" title={isDark ? "Switch to light theme" : "Switch to dark theme"} onclick={toggleTheme}>
+      <Icon name={isDark ? "sun" : "moon"} size={16} />
+    </button>
+    <button class="icon-btn" title="Run settings" onclick={() => (ui.settingsOpen = true)}>
+      <Icon name="sliders" size={16} />
+    </button>
+  </footer>
 </aside>
 
 <style>
@@ -171,6 +210,55 @@
   }
   :global(html.platform-mac) .sidebar {
     background: color-mix(in srgb, var(--sidebar-bg) 55%, transparent);
+  }
+  .footer {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    margin-top: auto;
+    padding: 6px 8px;
+    border-top: 1px solid var(--border);
+    flex: none;
+  }
+  .grow {
+    flex: 1;
+  }
+  .collapsed .footer {
+    flex-direction: column;
+    height: 100%;
+    border-top: 0;
+    padding: 8px 0;
+  }
+  .collapsed .footer .grow {
+    flex: 1;
+  }
+  .collapsed .footer :global(button:first-child) {
+    order: -1;
+  }
+  .root-wrap {
+    display: flex;
+    align-items: center;
+    margin: 2px 8px 4px;
+  }
+  .root-wrap .root {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+  }
+  .vars-btn {
+    margin-left: auto;
+    margin-right: 4px;
+    width: 20px;
+    height: 20px;
+    flex: none;
+    opacity: 0;
+  }
+  .row:hover .vars-btn,
+  .vars-btn.has {
+    opacity: 1;
+  }
+  .vars-btn.has {
+    color: var(--attention);
   }
   .head {
     display: flex;
@@ -248,15 +336,6 @@
   .name {
     overflow: hidden;
     text-overflow: ellipsis;
-  }
-  .env-dot {
-    width: 6px;
-    height: 6px;
-    margin-left: auto;
-    margin-right: 8px;
-    border-radius: 50%;
-    background: var(--attention);
-    flex: none;
   }
   .empty {
     padding: 16px;

@@ -183,6 +183,25 @@ pub fn write_env(root: &Path, dir: &Path, vars: &[EnvVar]) -> Result<(), String>
     std::fs::write(&file, emit_env(vars)).map_err(|e| format!("cannot write {}: {e}", file.display()))
 }
 
+/// Raw text of a directory's `zurl.env` (empty when there is none).
+pub fn read_env_text(root: &Path, dir: &Path) -> Result<String, String> {
+    let dir = contain(root, dir)?;
+    Ok(std::fs::read_to_string(dir.join(ENV_FILE)).unwrap_or_default())
+}
+
+/// Writes raw `zurl.env` text; blank text removes the file.
+pub fn write_env_text(root: &Path, dir: &Path, text: &str) -> Result<(), String> {
+    let dir = contain(root, dir)?;
+    let file = dir.join(ENV_FILE);
+    if text.trim().is_empty() {
+        if file.exists() {
+            std::fs::remove_file(&file).map_err(|e| e.to_string())?;
+        }
+        return Ok(());
+    }
+    std::fs::write(&file, text).map_err(|e| format!("cannot write {}: {e}", file.display()))
+}
+
 /// Directories from `root` down to `dir`, inclusive.
 fn chain(root: &Path, dir: &Path) -> Result<Vec<PathBuf>, String> {
     let dir = contain(root, dir)?;
