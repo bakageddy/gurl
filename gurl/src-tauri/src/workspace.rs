@@ -1,12 +1,12 @@
 //! Workspace model: a root directory that can nest up to [`MAX_DEPTH`] levels. Every
-//! directory may hold many `.hurl` scenarios and one `zurl.env` file with variable
+//! directory may hold many `.hurl` scenarios and one `gurl.env` file with variable
 //! definitions/overrides that apply to its scenarios and to every sub-directory.
 
 use serde::{Deserialize, Serialize};
 use std::path::{Component, Path, PathBuf};
 
 pub const MAX_DEPTH: usize = 255;
-pub const ENV_FILE: &str = "zurl.env";
+pub const ENV_FILE: &str = "gurl.env";
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -15,7 +15,7 @@ pub struct Node {
     pub path: String,
     /// `dir`, `hurl` or `env`.
     pub kind: &'static str,
-    /// For dirs: whether the dir contains a `zurl.env`.
+    /// For dirs: whether the dir contains a `gurl.env`.
     pub has_env: bool,
 }
 
@@ -33,7 +33,7 @@ pub struct EffectiveVar {
     pub name: String,
     pub value: String,
     pub secret: bool,
-    /// Directory whose `zurl.env` defines the winning value.
+    /// Directory whose `gurl.env` defines the winning value.
     pub source_dir: String,
     /// Directories further up that define the same name and are overridden.
     pub overrides: Vec<String>,
@@ -88,7 +88,7 @@ fn sort_nodes(nodes: &mut [Node]) {
     });
 }
 
-/// Lists one directory level (dirs, `.hurl` files and `zurl.env`); dotfiles are hidden.
+/// Lists one directory level (dirs, `.hurl` files and `gurl.env`); dotfiles are hidden.
 pub fn list_dir(root: &Path, dir: &Path) -> Result<Vec<Node>, String> {
     let dir = contain(root, dir)?;
     if depth_of(root, &dir)? > MAX_DEPTH {
@@ -183,13 +183,13 @@ pub fn write_env(root: &Path, dir: &Path, vars: &[EnvVar]) -> Result<(), String>
     std::fs::write(&file, emit_env(vars)).map_err(|e| format!("cannot write {}: {e}", file.display()))
 }
 
-/// Raw text of a directory's `zurl.env` (empty when there is none).
+/// Raw text of a directory's `gurl.env` (empty when there is none).
 pub fn read_env_text(root: &Path, dir: &Path) -> Result<String, String> {
     let dir = contain(root, dir)?;
     Ok(std::fs::read_to_string(dir.join(ENV_FILE)).unwrap_or_default())
 }
 
-/// Writes raw `zurl.env` text; blank text removes the file.
+/// Writes raw `gurl.env` text; blank text removes the file.
 pub fn write_env_text(root: &Path, dir: &Path, text: &str) -> Result<(), String> {
     let dir = contain(root, dir)?;
     let file = dir.join(ENV_FILE);
@@ -218,7 +218,7 @@ fn chain(root: &Path, dir: &Path) -> Result<Vec<PathBuf>, String> {
     Ok(dirs)
 }
 
-/// Variables as seen by scenarios in `dir`: root first, each deeper `zurl.env` overriding.
+/// Variables as seen by scenarios in `dir`: root first, each deeper `gurl.env` overriding.
 pub fn effective_vars(root: &Path, dir: &Path) -> Result<Vec<EffectiveVar>, String> {
     let mut out: Vec<EffectiveVar> = Vec::new();
     for d in chain(root, dir)? {
@@ -426,7 +426,7 @@ mod tests {
     use super::*;
 
     fn tmp(name: &str) -> PathBuf {
-        let p = std::env::temp_dir().join(format!("zurl-ws-{name}-{}", std::process::id()));
+        let p = std::env::temp_dir().join(format!("gurl-ws-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&p);
         std::fs::create_dir_all(&p).unwrap();
         p

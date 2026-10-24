@@ -10,7 +10,7 @@
   const title = $derived(
     [workspace.root ? basename(workspace.root) : null, tabs.active && "title" in tabs.active ? tabs.active.title : null]
       .filter(Boolean)
-      .join("  —  ") || "Zurl",
+      .join("  —  ") || "gURL",
   );
 </script>
 

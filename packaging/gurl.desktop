@@ -1,8 +1,8 @@
 [Desktop Entry]
 Type=Application
-Name=Zurl
+Name=gURL
 Comment=A native-feeling GUI for HURL
-Exec=zurl
-Icon=zurl
+Exec=gurl
+Icon=gurl
 Terminal=false
 Categories=Development;Network;

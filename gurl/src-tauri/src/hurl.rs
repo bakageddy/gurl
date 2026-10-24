@@ -188,7 +188,7 @@ impl Default for HurlRunOptions {
     }
 }
 
-/// A variable coming from a workspace `zurl.env` chain.
+/// A variable coming from a workspace `gurl.env` chain.
 #[derive(Debug, Clone)]
 pub struct VarSpec {
     pub name: String,

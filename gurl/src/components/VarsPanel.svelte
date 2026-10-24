@@ -91,7 +91,7 @@
   <header>
     <div class="segmented">
       <button class:active={mode === "table"} onclick={() => setMode("table")}>Table</button>
-      <button class:active={mode === "text"} onclick={() => setMode("text")}>zurl.env</button>
+      <button class:active={mode === "text"} onclick={() => setMode("text")}>gurl.env</button>
     </div>
     <div>
       <h2>Variables</h2>
@@ -102,13 +102,13 @@
     </div>
   </header>
   <p class="hint muted">
-    Defined in this folder's <code>zurl.env</code>. They apply to every scenario here and in all sub-folders; a
+    Defined in this folder's <code>gurl.env</code>. They apply to every scenario here and in all sub-folders; a
     sub-folder can override a name by defining it again. Reference them as <code>{"{{name}}"}</code>. Secrets are
     redacted in logs and reports.
   </p>
 
   {#if mode === "text"}
-    <h3 class="label">zurl.env</h3>
+    <h3 class="label">gurl.env</h3>
     <p class="hint muted">
       One <code>name=value</code> per line. A <code># @secret</code> comment line marks the next variable as a secret.
     </p>

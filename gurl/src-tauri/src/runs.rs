@@ -383,7 +383,7 @@ mod tests {
                 let mut stream = stream;
                 let mut buf = [0u8; 4096];
                 let _ = stream.read(&mut buf);
-                let body = r#"{"name":"zurl","n":3}"#;
+                let body = r#"{"name":"gurl","n":3}"#;
                 let _ = write!(
                     stream,
                     "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
@@ -397,12 +397,12 @@ mod tests {
     #[test]
     fn dir_run_uses_inherited_vars_and_exports_reports() {
         let port = mock_server();
-        let root = std::env::temp_dir().join(format!("zurl-run-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("gurl-run-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         let sub = root.join("api").join("v1");
         std::fs::create_dir_all(&sub).unwrap();
-        std::fs::write(root.join("zurl.env"), format!("host=127.0.0.1:{port}\nname=wrong\n")).unwrap();
-        std::fs::write(root.join("api").join("zurl.env"), "name=zurl\n").unwrap();
+        std::fs::write(root.join("gurl.env"), format!("host=127.0.0.1:{port}\nname=wrong\n")).unwrap();
+        std::fs::write(root.join("api").join("gurl.env"), "name=gurl\n").unwrap();
         std::fs::write(
             sub.join("a.hurl"),
             "GET http://{{host}}/x\nHTTP 200\n[Asserts]\njsonpath \"$.name\" == \"{{name}}\"\njsonpath \"$.n\" == 3\n",
@@ -416,7 +416,7 @@ mod tests {
         let store = RunStore::default();
         // `Channel` can only be built by Tauri's IPC; exercise the pieces it wraps instead.
         let env = env_for(Some(&root), &files[0]);
-        assert!(env.iter().any(|v| v.name == "name" && v.value == "zurl"));
+        assert!(env.iter().any(|v| v.name == "name" && v.value == "gurl"));
         let opts = HurlRunOptions::default();
         let (run_a, ex_a) = hurl::run(Source::File(files[0].clone()), &opts, &env);
         assert!(run_a.ok, "{:?}", run_a.error);

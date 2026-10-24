@@ -1,8 +1,8 @@
-# Contributing to Zurl
+# Contributing to gURL
 
-Thanks for helping out! Zurl is a [Tauri 2](https://tauri.app) app: a Rust backend that embeds the
+Thanks for helping out! gURL is a [Tauri 2](https://tauri.app) app: a Rust backend that embeds the
 [`hurl`](https://crates.io/crates/hurl) crates (no sidecar, no external `hurl` binary) and a
-Svelte 5 frontend. The app lives in the `zurl/` directory.
+Svelte 5 frontend. The app lives in the `gurl/` directory.
 
 ## Getting set up
 
@@ -34,7 +34,7 @@ sudo pacman -S --needed base-devel webkit2gtk-4.1 gtk3 libappindicator-gtk3 libr
 Then:
 
 ```sh
-cd zurl
+cd gurl
 npm install
 npm run tauri dev      # app with hot reload
 ```
@@ -42,7 +42,7 @@ npm run tauri dev      # app with hot reload
 ## Project layout
 
 ```
-zurl/
+gurl/
   src/                      Svelte 5 frontend (runes, plain Vite SPA)
     lib/api.ts              typed wrappers over every Tauri command
     lib/types.ts            mirrors the Rust model (camelCase JSON)
@@ -51,7 +51,7 @@ zurl/
     components/             Titlebar/chrome, Sidebar, DocView, builder/*, run/*, VarsPanel
   src-tauri/src/
     parse.rs / emit.rs      HURL text <-> structured model (model.rs) for the visual builder
-    workspace.rs            workspace tree, zurl.env variable inheritance, file ops, 255-level limit
+    workspace.rs            workspace tree, gurl.env variable inheritance, file ops, 255-level limit
     runs.rs                 run scopes (text/file/dir), streaming, history, HURL report export
     hurl.rs                 runner options + one run, built on the hurl crate
     lib.rs                  Tauri commands, app state, file watcher
@@ -62,7 +62,7 @@ packaging/                  desktop entry and Arch PKGBUILD
 ### Concepts worth knowing
 
 - **Workspace**: a folder tree up to 255 levels deep. Each folder can hold many `.hurl` scenarios and one
-  `zurl.env` (`name=value` lines, `# @secret` above a line marks a secret). A folder's variables apply to its
+  `gurl.env` (`name=value` lines, `# @secret` above a line marks a secret). A folder's variables apply to its
   scenarios and all sub-folders; deeper folders override shallower ones.
 - **Builder <-> text**: both views edit one model. `parse_hurl` turns text into the model, `emit_hurl` turns it
   back. Leaf values stay raw HURL source, so `{{templates}}` and quoting survive. If you add support for new
@@ -74,7 +74,7 @@ packaging/                  desktop entry and Arch PKGBUILD
 ## Before you open a pull request
 
 ```sh
-cd zurl
+cd gurl
 npm run check                       # svelte-check / TypeScript
 npm run build                       # production frontend build
 
@@ -98,8 +98,8 @@ CI runs the same checks on Ubuntu 22.04/24.04, macOS and Windows (`.github/workf
 
 ## Releases
 
-Releases are cut by tag. Bump the version in `zurl/package.json`, `zurl/src-tauri/Cargo.toml` and
-`zurl/src-tauri/tauri.conf.json`, then:
+Releases are cut by tag. Bump the version in `gurl/package.json`, `gurl/src-tauri/Cargo.toml` and
+`gurl/src-tauri/tauri.conf.json`, then:
 
 ```sh
 git tag v0.2.0 && git push origin v0.2.0
@@ -119,5 +119,5 @@ Bundles are unsigned (right-click -> Open on macOS, SmartScreen notice on Window
 
 ## Reporting bugs
 
-Please include your OS, the Zurl version, and, if a scenario misbehaves, the smallest `.hurl` file that
+Please include your OS, the gURL version, and, if a scenario misbehaves, the smallest `.hurl` file that
 reproduces it.

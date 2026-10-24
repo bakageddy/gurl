@@ -114,7 +114,7 @@
         <span>{basename(workspace.root)}</span>
         <span class="subtle mono">{total}</span>
       </button>
-      <button class="icon-btn" title="Workspace variables (zurl.env)" onclick={() => tabs.openVars(workspace.root!)}><Icon name="key" size={13} /></button>
+      <button class="icon-btn" title="Workspace variables (gurl.env)" onclick={() => tabs.openVars(workspace.root!)}><Icon name="key" size={13} /></button>
       </div>
       <div
         class="tree"
@@ -150,7 +150,7 @@
                 <button
                   class="icon-btn vars-btn"
                   class:has={r.node.hasEnv}
-                  title={r.node.hasEnv ? "Edit variables (zurl.env)" : "Add variables (zurl.env)"}
+                  title={r.node.hasEnv ? "Edit variables (gurl.env)" : "Add variables (gurl.env)"}
                   onclick={(e) => { e.stopPropagation(); tabs.openVars(r.node.path); }}
                 ><Icon name="key" size={12} /></button>
               {/if}
@@ -164,7 +164,7 @@
     {:else}
       <div class="welcome">
         <Icon name="folder" size={28} />
-        <p>Open a folder to use it as a workspace. Every folder can hold scenarios and a <code>zurl.env</code> with variables for itself and its sub-folders.</p>
+        <p>Open a folder to use it as a workspace. Every folder can hold scenarios and a <code>gurl.env</code> with variables for itself and its sub-folders.</p>
         <button class="btn primary" onclick={openWorkspaceDialog}>Open folder…</button>
       </div>
     {/if}

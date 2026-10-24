@@ -1,7 +1,7 @@
 {
-  "name": "zurl",
+  "name": "gurl",
   "version": "0.1.0",
-  "description": "Zurl - a native-feeling GUI for HURL",
+  "description": "gURL - a native-feeling GUI for HURL",
   "type": "module",
   "scripts": {
     "dev": "vite",

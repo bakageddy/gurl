@@ -46,7 +46,7 @@
 
         <section>
           <h4 class="label">Variable overrides</h4>
-          <p class="hint muted">One <code>name=value</code> per line. These win over every <code>zurl.env</code>.</p>
+          <p class="hint muted">One <code>name=value</code> per line. These win over every <code>gurl.env</code>.</p>
           <textarea class="field mono" rows="3" bind:value={vars} onblur={commitVars} spellcheck="false"></textarea>
         </section>
 

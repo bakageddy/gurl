@@ -34,13 +34,13 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: zurl/package-lock.json
+          cache-dependency-path: gurl/package-lock.json
       - run: npm ci
-        working-directory: zurl
+        working-directory: gurl
       - run: npm run check
-        working-directory: zurl
+        working-directory: gurl
       - run: npm run build -- --debug
-        working-directory: zurl
+        working-directory: gurl
 
   backend:
     strategy:
@@ -57,7 +57,7 @@ jobs:
 
       - uses: swatinem/rust-cache@v2
         with:
-          workspaces: zurl/src-tauri
+          workspaces: gurl/src-tauri
           key: ${{ matrix.platform }}
 
       - name: install linux system deps
@@ -70,12 +70,12 @@ jobs:
       # tauri::generate_context! needs the frontend dist directory to exist.
       - name: stub frontend dist
         shell: bash
-        run: mkdir -p zurl/dist && touch zurl/dist/index.html
+        run: mkdir -p gurl/dist && touch gurl/dist/index.html
 
       - name: test
         run: cargo test --lib -- --nocapture
-        working-directory: zurl/src-tauri
+        working-directory: gurl/src-tauri
 
       - name: clippy
         run: cargo clippy --lib -- -D warnings
-        working-directory: zurl/src-tauri
+        working-directory: gurl/src-tauri

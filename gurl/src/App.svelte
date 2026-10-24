@@ -106,7 +106,7 @@
           {#key tabs.active.id}<ReportView run={tabs.active.run} />{/key}
         {:else}
           <div class="welcome">
-            <h1>Zurl</h1>
+            <h1>gURL</h1>
             <p class="muted">A native-feeling workspace for HURL scenarios.</p>
             <div class="actions">
               <button class="btn primary" onclick={openWorkspaceDialog}><Icon name="folder-open" size={13} /> Open workspace</button>
