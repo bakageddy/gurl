@@ -38,6 +38,26 @@ the Arch tarball, make sure they are installed:
 
 `gurl --version` prints which libraries are in use.
 
+## Command line
+
+The same binary is HURL's command line, so one install covers the desktop and CI:
+
+```sh
+gurl                                   # open the app
+gurl cli --test api/*.hurl             # exactly `hurl --test api/*.hurl`
+gurl cli --report-html out login.hurl  # every hurl option, HURL_* env var and exit code (0/1/2/3/4)
+gurl --version                         # gURL, HURL, libcurl/libxml2 versions and how they are linked
+```
+
+`gurl cli` adds the workspace to hurl: for each file it finds the topmost parent directory holding a `gurl.env`
+and applies the variables from there down to the file's directory (deeper overrides shallower, `# @secret`
+values are redacted), exactly as the app does. `--workspace <DIR>` sets the root explicitly, `--no-workspace`
+turns it off, and `--variable`/`--variables-file`/`HURL_VARIABLE_*` still win over `gurl.env`.
+
+Putting `gurl` on your PATH: Linux packages install `/usr/bin/gurl`. On macOS, `ln -s /Applications/gURL.app/Contents/MacOS/gurl /usr/local/bin/gurl`.
+On Windows, add the install directory to PATH; the terminal prompt may return before the output when the
+command is not piped or redirected (the app is a GUI program), `gurl cli … | more` waits.
+
 ## Develop
 
 ```sh
@@ -53,4 +73,5 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for setup per OS, the project layout, che
 - The app icon lettering is set in [Commit Mono](https://commitmono.com) by Eigil Nikolajsen
   (SIL Open Font License 1.1).
 - The UI uses [Inter](https://rsms.me/inter/) (OFL) and, off macOS, [DejaVu Sans Mono](https://dejavu-fonts.github.io/)
-  for code; both are bundled. [HURL](https://hurl.dev) by Orange does the actual requests.
+  for code; both are bundled. [HURL](https://hurl.dev) by Orange does the actual requests; `gurl cli` is HURL's own
+  command line source (Apache-2.0), vendored in `gurl/crates/gurl-core/src/cli/hurl`.

@@ -439,7 +439,7 @@ fn build_runner_options(
     Ok(builder.build())
 }
 
-fn parse_value(value: &str) -> Value {
+pub(crate) fn parse_value(value: &str) -> Value {
     // Numbers and booleans keep their type, anything else is a string.
     if let Ok(n) = value.parse::<i64>() {
         Value::Number(hurl::runner::Number::Integer(n))

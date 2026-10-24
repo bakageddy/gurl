@@ -1714,16 +1714,24 @@ dependencies = [
  "tauri-plugin-opener",
  "thiserror 2.0.21",
  "window-vibrancy",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
 name = "gurl-core"
 version = "0.4.0"
 dependencies = [
+ "clap",
+ "curl-sys",
+ "glob",
  "hurl",
  "hurl_core",
+ "libc",
+ "libxml",
+ "regex",
  "serde",
  "serde_json",
+ "terminal_size",
  "thiserror 2.0.21",
 ]
 

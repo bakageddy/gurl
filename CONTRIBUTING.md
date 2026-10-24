@@ -64,6 +64,8 @@ gurl/
     components/             Titlebar/chrome, Sidebar, DocView, builder/*, run/*, VarsPanel
   Cargo.toml                cargo workspace (version lives here, in [workspace.package])
   crates/gurl-core/src/     the engine, no GUI dependency (shared by the app and the CLI)
+    cli/hurl/               `gurl cli`: hurl's CLI sources, forked (see cli/hurl/UPSTREAM.md) + workspace.rs
+    cli/version.rs          `gurl --version`
     parse.rs / emit.rs      HURL text <-> structured model (model.rs) for the visual builder
     workspace.rs            workspace tree, gurl.env variable inheritance, file ops, 255-level limit
     runs.rs                 run scopes (text/file/dir), streaming, history, HURL report export
@@ -143,7 +145,10 @@ cd gurl/vendor/hurl && git fetch --depth 1 origin tag <new-version> && git check
 cd ../.. && git add vendor/hurl
 ```
 
-Then fix any API changes in `crates/gurl-core/src/hurl.rs` and `parse.rs`, and update the tag in `packaging/arch/PKGBUILD`.
+Then fix any API changes in `crates/gurl-core/src/hurl.rs` and `parse.rs`, update the tag in `packaging/arch/PKGBUILD`,
+and re-apply the fork of the CLI: `diff -r vendor/hurl/packages/hurl/src/cli crates/gurl-core/src/cli/hurl/options`
+(plus `main.rs`/`run.rs` → `entry.rs`/`run.rs`); `crates/gurl-core/src/cli/hurl/UPSTREAM.md` lists every local change.
+`gurl --version` reads HURL's version from the submodule, so it follows automatically.
 
 ## App icon
 
