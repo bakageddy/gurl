@@ -16,6 +16,8 @@ pub enum Error {
     NotADirectory(PathBuf),
     #[error("only .hurl files can be accessed outside the workspace")]
     OutsideAccess,
+    #[error("{0}")]
+    Format(String),
     #[error("{action} {}", .path.display())]
     Io {
         action: &'static str,

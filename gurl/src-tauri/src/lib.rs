@@ -48,6 +48,12 @@ fn emit_hurl(model: model::HurlDoc) -> String {
     emit::emit(&model)
 }
 
+/// hurlfmt's formatting of one document; the error is the parse error with its position.
+#[command]
+fn format_hurl(text: String) -> Result<String> {
+    gurl_core::cli::fmt::format_text(&text).map_err(Error::Format)
+}
+
 // -------------------------------------------------------------- workspace
 
 #[derive(Serialize)]
@@ -372,6 +378,7 @@ pub fn run() {
             hurl_version,
             parse_hurl,
             emit_hurl,
+            format_hurl,
             open_workspace,
             close_workspace,
             list_dir,

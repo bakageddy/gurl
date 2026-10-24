@@ -16,7 +16,7 @@
   import { tabs } from "./lib/stores/tabs.svelte";
   import { runs } from "./lib/stores/runs.svelte";
   import { ui } from "./lib/stores/ui.svelte";
-  import { newScenario, openFileDialog, openWorkspaceDialog, openWorkspacePath, runActive, saveActive } from "./lib/actions";
+  import { formatActive, newScenario, openFileDialog, openWorkspaceDialog, openWorkspacePath, runActive, saveActive } from "./lib/actions";
 
   let sidebarOpen = $state(true);
 
@@ -35,6 +35,11 @@
   });
 
   function onKey(e: KeyboardEvent) {
+    if (e.shiftKey && e.altKey && e.key.toLowerCase() === "f") {
+      e.preventDefault();
+      void formatActive();
+      return;
+    }
     const mod = e.ctrlKey || e.metaKey;
     if (!mod) return;
     if (e.key === "s") {

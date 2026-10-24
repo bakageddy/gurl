@@ -13,6 +13,10 @@ fn main() {
             attach_console();
             exit(gurl_core::cli::hurl::main(&args[2..]));
         }
+        Some("fmt") => {
+            attach_console();
+            exit(gurl_core::cli::fmt::main(&args[2..]));
+        }
         Some("--version") | Some("-V") => {
             attach_console();
             print!("{}", gurl_core::cli::version::long());

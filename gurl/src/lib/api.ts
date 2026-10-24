@@ -17,6 +17,7 @@ import type {
 export const hurlVersion = () => invoke<string>("hurl_version");
 export const parseHurl = (text: string) => invoke<ParseOutcome>("parse_hurl", { text });
 export const emitHurl = (model: HurlDoc) => invoke<string>("emit_hurl", { model });
+export const formatHurl = (text: string) => invoke<string>("format_hurl", { text });
 
 export const openWorkspace = (path: string) => invoke<WorkspaceInfo>("open_workspace", { path });
 export const closeWorkspace = () => invoke<void>("close_workspace");

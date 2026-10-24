@@ -6,7 +6,7 @@
   import { settings } from "../lib/stores/settings.svelte";
   import { tabs, type DocTab } from "../lib/stores/tabs.svelte";
   import { runs } from "../lib/stores/runs.svelte";
-  import { runActive, saveActive } from "../lib/actions";
+  import { formatActive, runActive, saveActive } from "../lib/actions";
   import { ms } from "../lib/format";
 
   let { tab }: { tab: DocTab } = $props();
@@ -47,6 +47,9 @@
     </div>
     {#if tab.path === null}<span class="badge warn">Unsaved scenario</span>{/if}
     <span class="spacer"></span>
+    {#if tab.mode === "text"}
+      <button class="btn" onclick={formatActive} title="Format with hurlfmt (Shift+Alt+F)"><Icon name="list" size={13} /> Format</button>
+    {/if}
     <button class="btn" onclick={saveActive} disabled={!tab.dirty && tab.path !== null}><Icon name="save" size={13} /> Save</button>
     {#if run?.running}
       <button class="btn danger" onclick={() => runs.cancel(run)}><Icon name="stop" size={12} /> Stop</button>

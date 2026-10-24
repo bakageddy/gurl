@@ -47,6 +47,7 @@ gurl                                   # open the app
 gurl cli --test api/*.hurl             # exactly `hurl --test api/*.hurl`
 gurl cli --report-html out login.hurl  # every hurl option, HURL_* env var and exit code (0/1/2/3/4)
 gurl --version                         # gURL, HURL, libcurl/libxml2 versions and how they are linked
+gurl fmt --check .                     # `hurlfmt` (format / --in-place / --out json|html / --in curl); directories expand to every .hurl
 ```
 
 `gurl cli` adds the workspace to hurl: for each file it finds the topmost parent directory holding a `gurl.env`

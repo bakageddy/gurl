@@ -1726,6 +1726,7 @@ dependencies = [
  "glob",
  "hurl",
  "hurl_core",
+ "hurlfmt",
  "libc",
  "libxml",
  "regex",
@@ -1867,6 +1868,16 @@ version = "8.0.1"
 dependencies = [
  "colored",
  "libxml",
+ "regex",
+]
+
+[[package]]
+name = "hurlfmt"
+version = "8.0.1"
+dependencies = [
+ "base64 0.22.1",
+ "clap",
+ "hurl_core",
  "regex",
 ]
 

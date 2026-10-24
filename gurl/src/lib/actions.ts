@@ -4,6 +4,7 @@ import { settings } from "./stores/settings.svelte";
 import { tabs } from "./stores/tabs.svelte";
 import { ui } from "./stores/ui.svelte";
 import { workspace } from "./stores/workspace.svelte";
+import { formatHurl } from "./api";
 import { basename, dirname } from "./format";
 
 const SCENARIO_TEMPLATE = "GET https://example.org\n\nHTTP 200\n";
@@ -113,6 +114,19 @@ export async function runFilePath(path: string) {
 export async function runActive() {
   const t = tabs.active;
   if (t?.kind === "doc") await t.execute(t.path ? "file" : "text");
+}
+
+/// hurlfmt's formatting of the active scenario's text (the builder view is already canonical).
+export async function formatActive() {
+  const t = tabs.active;
+  if (t?.kind !== "doc") return;
+  await t.sync();
+  try {
+    const formatted = await formatHurl(t.text);
+    if (formatted !== t.text) t.setText(formatted);
+  } catch (e) {
+    ui.error(e);
+  }
 }
 
 export async function saveActive() {
