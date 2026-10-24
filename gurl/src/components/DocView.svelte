@@ -2,6 +2,7 @@
   import { setContext } from "svelte";
   import Icon from "./Icon.svelte";
   import Builder from "./builder/Builder.svelte";
+  import QuickBar from "./QuickBar.svelte";
   import TextEditor from "./LazyEditor.svelte";
   import FileRunView from "./run/FileRunView.svelte";
   import { settings } from "../lib/stores/settings.svelte";
@@ -62,7 +63,7 @@
       <button class:active={tab.mode === "builder"} onclick={() => setMode("builder")}>Builder</button>
       <button class:active={tab.mode === "text"} onclick={() => setMode("text")}>Text</button>
     </div>
-    {#if tab.path === null}<span class="badge warn">Unsaved scenario</span>{/if}
+    {#if tab.path === null}<span class="badge warn">{tab.quick ? "Quick request · not saved" : "Unsaved scenario"}</span>{/if}
     <span class="spacer"></span>
     {#if tab.mode === "text"}
       <button class="btn" onclick={formatActive} title="Format with hurlfmt (Shift+Alt+F)"><Icon name="list" size={13} /> Format</button>
@@ -74,6 +75,8 @@
       <button class="btn primary" onclick={runActive} title="Run (Ctrl/Cmd+Enter)"><Icon name="play" size={12} /> Run</button>
     {/if}
   </div>
+
+  {#if tab.quick}<QuickBar {tab} />{/if}
 
   <div class="main" bind:this={main} style:grid-template-columns="1fr 6px {settings.resultWidth}%">
     <div class="editor-pane">

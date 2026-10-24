@@ -26,6 +26,9 @@ pub struct ScopeRequest {
     pub recursive: bool,
     #[serde(default)]
     pub jobs: usize,
+    /// For `text` runs: the workspace folder whose `gurl.env` chain applies (a quick request has no
+    /// file to derive it from).
+    pub env_dir: Option<String>,
     pub options: HurlRunOptions,
 }
 
@@ -204,7 +207,11 @@ impl RunStore {
                             (_, Some(c)) => Source::Text(c.clone(), Some(path.clone())),
                             _ => Source::File(path.clone()),
                         };
-                        let env = env_for(root.as_deref(), path);
+                        let env_path = match &req.env_dir {
+                            Some(d) => PathBuf::from(d).join("request.hurl"),
+                            None => path.clone(),
+                        };
+                        let env = env_for(root.as_deref(), &env_path);
                         let out = hurl::run(source, &req.options, &env);
                         on_event(RunEvent::FileFinished {
                             index: i,

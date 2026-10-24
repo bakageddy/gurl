@@ -53,6 +53,8 @@ export interface ScopeRequest {
   content?: string;
   recursive?: boolean;
   jobs?: number;
+  /** For text runs: the folder whose gurl.env chain applies. */
+  envDir?: string;
   options: RunOptions;
 }
 

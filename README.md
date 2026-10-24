@@ -8,6 +8,8 @@ A GUI for [HURL](https://hurl.dev), written in Tauri 2 (Rust) and Svelte 5. HURL
 - **Workspace support**: open a folder and organise `.hurl` scenarios in sub-folders.
 - **Variables per folder**: a `gurl.env` in any folder defines variables for its scenarios and every
   sub-folder; deeper folders override shallower ones. Secrets are redacted in logs and reports.
+- **Quick request** (Ctrl/Cmd+K): a scratch tab with a URL bar; paste a cURL command into it and it becomes the
+  request. Send, then "Save as…" into the workspace when it's worth keeping.
 - **Visual builder**: methods, query/form/**multipart** (files from the scenario's folder), cookies, basic auth,
   JSON/XML/text/GraphQL/base64/hex/file bodies, per-request options, asserts (every query, filter and predicate),
   captures, and response status/version/headers and body assertions.

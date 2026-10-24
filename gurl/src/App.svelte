@@ -61,6 +61,9 @@
     } else if (e.key === "b") {
       e.preventDefault();
       sidebarOpen = !sidebarOpen;
+    } else if (e.key === "k") {
+      e.preventDefault();
+      tabs.newQuick();
     }
   }
 
@@ -95,7 +98,7 @@
           <div class="tab" class:active={tabs.activeId === t.id} role="tab" tabindex="0" aria-selected={tabs.activeId === t.id}
             onclick={() => (tabs.activeId = t.id)} onkeydown={(e) => e.key === "Enter" && (tabs.activeId = t.id)}
             onauxclick={(e) => e.button === 1 && tabs.close(t.id)}>
-            <Icon name={t.kind === "doc" ? "file" : t.kind === "vars" ? "key" : "list"} size={13} />
+            <Icon name={t.kind === "doc" ? (t.quick ? "globe" : "file") : t.kind === "vars" ? "key" : "list"} size={13} />
             <span class="t-name">{t.title}</span>
             {#if t.kind === "doc" && t.dirty}<span class="dirty" title="Unsaved changes"></span>{/if}
             <button class="icon-btn close" aria-label="Close tab" onclick={(e) => { e.stopPropagation(); void tabs.close(t.id); }}><Icon name="x" size={11} /></button>
@@ -116,11 +119,12 @@
             <p class="muted">A native-feeling workspace for HURL scenarios.</p>
             <div class="actions">
               <button class="btn primary" onclick={openWorkspaceDialog}><Icon name="folder-open" size={13} /> Open workspace</button>
+              <button class="btn" onclick={() => tabs.newQuick()}><Icon name="globe" size={13} /> Quick request</button>
               <button class="btn" onclick={() => tabs.newUntitled()}><Icon name="file-plus" size={13} /> New scenario</button>
               <button class="btn" onclick={openFileDialog}><Icon name="file" size={13} /> Open file</button>
               {#if workspace.root}<button class="btn" onclick={() => newScenario()}><Icon name="plus" size={13} /> Scenario in workspace</button>{/if}
             </div>
-            <p class="subtle keys">Ctrl/Cmd+Shift+O workspace · Ctrl/Cmd+O file · Ctrl/Cmd+N new · Ctrl/Cmd+Enter run · Ctrl/Cmd+S save</p>
+            <p class="subtle keys">Ctrl/Cmd+K quick request · Ctrl/Cmd+Shift+O workspace · Ctrl/Cmd+O file · Ctrl/Cmd+N new · Ctrl/Cmd+Enter run · Ctrl/Cmd+S save</p>
           </div>
         {/if}
       </div>

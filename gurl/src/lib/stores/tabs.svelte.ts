@@ -11,6 +11,7 @@ import { ui } from "./ui.svelte";
 export type DocMode = "builder" | "text";
 
 const UNTITLED_TEXT = "GET https://example.org\n\nHTTP 200\n";
+const QUICK_TEXT = "GET https://example.org\n";
 let untitledSeq = 0;
 
 export class DocTab {
@@ -26,18 +27,26 @@ export class DocTab {
   droppedComments = $state(0);
   mode = $state<DocMode>("builder");
   run = $state<RunState | null>(null);
+  /** A scratch request opened with Ctrl/Cmd+K: URL bar on top, saved on demand. */
+  quick = $state(false);
   dirty = $derived(this.text !== this.saved);
 
   private parseTimer: ReturnType<typeof setTimeout> | undefined;
   private emitTimer: ReturnType<typeof setTimeout> | undefined;
   private seq = 0;
 
-  constructor(path: string | null, text: string) {
+  constructor(path: string | null, text: string, opts: { quick?: boolean } = {}) {
     this.path = path;
     this.id = path ?? `untitled-${++untitledSeq}`;
     this.name = path ? basename(path) : `Untitled ${untitledSeq}.hurl`;
     this.text = text;
     this.saved = path ? text : "";
+    if (opts.quick) {
+      this.quick = true;
+      this.name = "Quick request";
+      // Closing an untouched quick request shouldn't ask about unsaved changes.
+      this.saved = text;
+    }
     void this.reparse();
   }
 
@@ -146,7 +155,7 @@ export class DocTab {
     await this.sync();
     this.run = await runs.start(
       kind === "text" || !this.path
-        ? { kind: "text", content: this.text, path: this.path ?? undefined }
+        ? { kind: "text", content: this.text, path: this.path ?? undefined, envDir: workspace.targetDir() ?? undefined }
         : { kind: "file", path: this.path, content: this.dirty ? this.text : undefined },
       this.name,
     );
@@ -204,6 +213,16 @@ class Tabs {
 
   newUntitled() {
     return this.add(new DocTab(null, UNTITLED_TEXT));
+  }
+
+  /** Ctrl/Cmd+K: a scratch request; an untouched one is reused instead of piling up tabs. */
+  newQuick() {
+    const existing = this.list.find((t): t is DocTab => t.kind === "doc" && t.quick && !t.dirty && !t.run);
+    if (existing) {
+      this.activeId = existing.id;
+      return existing;
+    }
+    return this.add(new DocTab(null, QUICK_TEXT, { quick: true }));
   }
 
   async openFile(path: string) {
