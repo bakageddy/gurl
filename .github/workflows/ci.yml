@@ -70,14 +70,18 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file \
             libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev \
-            libxml2-dev libclang-dev
+            libcurl4-openssl-dev libxml2-dev libclang-dev
 
       - name: install macOS deps
         if: startsWith(matrix.platform, 'macos')
         run: |
-          brew install openssl@3 libxml2 pkg-config
+          # libcurl and libxml2 come from the macOS SDK (they ship with the OS, so nothing to install
+          # for users). OpenSSL is only a build-time need of curl-sys: link Homebrew's static archives
+          # so the app doesn't depend on Homebrew at runtime.
+          brew install openssl@3
           echo "OPENSSL_DIR=$(brew --prefix openssl@3)" >> "$GITHUB_ENV"
-          echo "PKG_CONFIG_PATH=$(brew --prefix libxml2)/lib/pkgconfig:$(brew --prefix openssl@3)/lib/pkgconfig" >> "$GITHUB_ENV"
+          echo "OPENSSL_STATIC=1" >> "$GITHUB_ENV"
+          echo "LIBXML2=$(xcrun --show-sdk-path)/usr/lib/libxml2.tbd" >> "$GITHUB_ENV"
 
       - name: install windows deps (vcpkg)
         if: matrix.platform == 'windows-latest'

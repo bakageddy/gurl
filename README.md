@@ -22,6 +22,22 @@ Download the latest build for your platform from the Releases page: `.dmg` (macO
 NSIS `.exe` (Windows), `.deb`/`.AppImage` (Ubuntu 22.04 and 24.04), `.rpm` (Fedora), or the Arch tarball /
 `packaging/arch/PKGBUILD`.
 
+### Runtime dependencies
+
+gURL links the HURL engine's native libraries dynamically from the OS: **libcurl**, **libxml2** and **OpenSSL**.
+The `.deb`, `.rpm` and the Arch `PKGBUILD` declare them, so a package manager pulls them in. For the AppImage or
+the Arch tarball, make sure they are installed:
+
+| | Packages |
+| --- | --- |
+| Ubuntu / Debian | `libcurl4 libxml2 libssl3` (`libssl3t64` on 24.04) |
+| Fedora | `libcurl libxml2 openssl-libs` |
+| Arch | `curl libxml2 openssl` |
+| macOS | nothing: libcurl and libxml2 ship with the OS |
+| Windows | nothing: the installer is self-contained |
+
+`gurl --version` prints which libraries are in use.
+
 ## Develop
 
 ```sh

@@ -8,8 +8,8 @@ pkgdesc='A GUI for HURL: workspaces, a visual request builder and reports'
 arch=('x86_64')
 url='https://github.com/bakageddy/gurl'
 license=('MIT')
-depends=('webkit2gtk-4.1' 'gtk3' 'libappindicator-gtk3' 'librsvg' 'openssl')
-makedepends=('rust' 'nodejs' 'npm' 'git' 'pkgconf')
+depends=('webkit2gtk-4.1' 'gtk3' 'libappindicator-gtk3' 'librsvg' 'openssl' 'curl' 'libxml2')
+makedepends=('rust' 'nodejs' 'npm' 'git' 'pkgconf' 'clang')
 source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
 sha256sums=('SKIP')
 

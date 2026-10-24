@@ -12,23 +12,27 @@ You need Node.js 22+, a recent stable Rust toolchain and the Tauri system depend
 
 ```sh
 sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file \
-  libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev patchelf
+  libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev patchelf \
+  libcurl4-openssl-dev libxml2-dev libclang-dev
 ```
 
 **Fedora**
 
 ```sh
 sudo dnf install -y webkit2gtk4.1-devel openssl-devel gtk3-devel libappindicator-gtk3-devel \
-  librsvg2-devel libxdo-devel gcc gcc-c++ make patchelf
+  librsvg2-devel libxdo-devel gcc gcc-c++ make patchelf libcurl-devel libxml2-devel clang-devel
 ```
 
 **Arch**
 
 ```sh
-sudo pacman -S --needed base-devel webkit2gtk-4.1 gtk3 libappindicator-gtk3 librsvg xdotool openssl patchelf
+sudo pacman -S --needed base-devel webkit2gtk-4.1 gtk3 libappindicator-gtk3 librsvg xdotool openssl patchelf curl libxml2 clang
 ```
 
-**macOS**: install the Xcode command line tools (`xcode-select --install`).
+**macOS**: install the Xcode command line tools (`xcode-select --install`) and `brew install openssl@3`, then
+export `OPENSSL_DIR=$(brew --prefix openssl@3)`, `OPENSSL_STATIC=1` and
+`LIBXML2=$(xcrun --show-sdk-path)/usr/lib/libxml2.tbd` (libcurl and libxml2 come from the SDK; OpenSSL is linked
+statically so the app has no Homebrew dependency at runtime).
 **Windows**: install the Visual Studio C++ build tools; WebView2 ships with Windows 11.
 
 HURL is vendored as a git submodule (`gurl/vendor/hurl`, pinned to tag `8.0.1`) because the published

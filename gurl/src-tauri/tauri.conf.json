@@ -58,9 +58,19 @@
     },
     "linux": {
       "deb": {
-        "depends": []
+        "depends": [
+          "libcurl4",
+          "libxml2",
+          "libssl3t64 | libssl3"
+        ]
       },
-      "rpm": {}
+      "rpm": {
+        "depends": [
+          "libcurl",
+          "libxml2",
+          "openssl-libs"
+        ]
+      }
     }
   }
 }
