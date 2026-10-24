@@ -1,6 +1,6 @@
 {
   "name": "gurl",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "description": "gURL - a native-feeling GUI for HURL",
   "type": "module",
   "scripts": {

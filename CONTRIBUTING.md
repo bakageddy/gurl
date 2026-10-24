@@ -56,6 +56,7 @@ gurl/
     hurl.rs                 runner options + one run, built on the hurl crate
     lib.rs                  Tauri commands, app state, file watcher
   src-tauri/fixtures/       HURL files used by the round-trip tests
+assets/                     app icon source (icon.svg -> icon-1024.png)
 packaging/                  desktop entry and Arch PKGBUILD
 ```
 
@@ -116,6 +117,17 @@ git tag v0.2.0 && git push origin v0.2.0
 | Arch | `.tar.gz` binary; `packaging/arch/PKGBUILD` builds a pacman package |
 
 Bundles are unsigned (right-click -> Open on macOS, SmartScreen notice on Windows).
+
+## App icon
+
+The icon is drawn in `gurl/assets/icon.svg` (small green `g`, caps `URL`, no font dependency). To change it:
+
+```sh
+cd gurl
+rsvg-convert -w 1024 -h 1024 assets/icon.svg -o assets/icon-1024.png
+npx tauri icon assets/icon-1024.png
+rm -rf src-tauri/icons/android src-tauri/icons/ios   # desktop only
+```
 
 ## Reporting bugs
 
