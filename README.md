@@ -33,3 +33,10 @@ npm run tauri dev
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for setup per OS, the project layout, checks and the release process.
+
+## Credits
+
+- The app icon lettering is set in [Commit Mono](https://commitmono.com) by Eigil Nikolajsen
+  (SIL Open Font License 1.1).
+- The UI uses [Inter](https://rsms.me/inter/) (OFL) and, off macOS, [DejaVu Sans Mono](https://dejavu-fonts.github.io/)
+  for code; both are bundled. [HURL](https://hurl.dev) by Orange does the actual requests.
