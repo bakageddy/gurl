@@ -8,6 +8,9 @@
 #   - Arch      : binary tarball built inside an Arch container (_arch), plus
 #                 packaging/arch/PKGBUILD to build a proper pacman package
 #
+# Native deps: the hurl crates link libxml2 (via the `libxml` crate, which runs bindgen, so libclang
+# is needed too) and OpenSSL. Every leg installs those explicitly -- see the per-OS steps below.
+#
 # Design notes (same rationale as the sps project's release workflow):
 #  - Releases are cut by TAG, not by pushes to main: `git tag v0.2.0 && git push --tags`.
 #    Every job releases under `github.ref_name`, so all bundles land in one release.
@@ -20,7 +23,8 @@
 #  - An rpm built on Ubuntu is useless on Fedora, and Arch needs Arch's libraries, so
 #    those jobs run in distro containers. gh in a container gets GH_REPO + safe.directory
 #    because the checkout is owned by a different uid ("dubious ownership").
-#  - macOS: one runner builds both architectures (the Intel runner image is retired).
+#  - macOS: Apple Silicon builds on macos-latest, Intel natively on macos-15-intel (cross-compiling
+#    x86_64 on arm64 can't locate openssl/libxml2 through pkg-config).
 #  - Bundles are unsigned: macOS users right-click -> Open the first time, Windows shows a
 #    SmartScreen notice. Signing requires paid certificates.
 
@@ -53,10 +57,11 @@ jobs:
             label: macos-aarch64
             args: --target aarch64-apple-darwin --bundles dmg --verbose
             rust-targets: aarch64-apple-darwin
-          - platform: macos-latest
+          # Native Intel runner: cross-compiling from the arm64 runner can't find openssl/libxml2.
+          - platform: macos-15-intel
             label: macos-x64
-            args: --target x86_64-apple-darwin --bundles dmg --verbose
-            rust-targets: x86_64-apple-darwin
+            args: --bundles dmg --verbose
+            rust-targets: ""
           - platform: windows-latest
             label: windows
             args: --bundles nsis --verbose
@@ -94,7 +99,24 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file \
-            libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev patchelf
+            libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev patchelf \
+            libxml2-dev libclang-dev
+
+      - name: install macOS deps
+        if: startsWith(matrix.platform, 'macos')
+        run: |
+          brew install openssl@3 libxml2 pkg-config
+          echo "OPENSSL_DIR=$(brew --prefix openssl@3)" >> "$GITHUB_ENV"
+          echo "PKG_CONFIG_PATH=$(brew --prefix libxml2)/lib/pkgconfig:$(brew --prefix openssl@3)/lib/pkgconfig" >> "$GITHUB_ENV"
+
+      - name: install windows deps (vcpkg)
+        if: matrix.platform == 'windows-latest'
+        shell: pwsh
+        run: |
+          & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install libxml2:x64-windows-static-md openssl:x64-windows-static-md
+          "VCPKG_ROOT=$env:VCPKG_INSTALLATION_ROOT" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "VCPKGRS_TRIPLET=x64-windows-static-md" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "LIBCLANG_PATH=C:\Program Files\LLVM\bin" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - run: npm ci
         working-directory: gurl
@@ -152,7 +174,8 @@ jobs:
         run: |
           dnf install -y git gh curl wget file xz tar gzip gcc gcc-c++ make pkgconf-pkg-config \
             webkit2gtk4.1-devel openssl-devel gtk3-devel libappindicator-gtk3-devel \
-            librsvg2-devel libxdo-devel rpm-build patchelf
+            librsvg2-devel libxdo-devel rpm-build patchelf \
+            libxml2-devel clang-devel
 
       - uses: actions/checkout@v4
 
@@ -200,7 +223,8 @@ jobs:
       - name: install system deps
         run: |
           pacman -Syu --noconfirm --needed base-devel git github-cli curl wget file openssl \
-            webkit2gtk-4.1 gtk3 libappindicator-gtk3 librsvg xdotool nodejs npm patchelf
+            webkit2gtk-4.1 gtk3 libappindicator-gtk3 librsvg xdotool nodejs npm patchelf \
+            libxml2 clang
 
       - uses: actions/checkout@v4
 
