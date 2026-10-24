@@ -120,7 +120,7 @@ Bundles are unsigned (right-click -> Open on macOS, SmartScreen notice on Window
 
 ## App icon
 
-The icon is drawn in `gurl/assets/icon.svg` (small green `g`, caps `URL`, no font dependency). To change it:
+The icon is `gurl/assets/icon.svg`: a flat black tile with `gURL` in terminal green, set in Commit Mono Bold (SIL OFL) and converted to outlines, so editing the text needs that font (or edit the paths). To change it:
 
 ```sh
 cd gurl
