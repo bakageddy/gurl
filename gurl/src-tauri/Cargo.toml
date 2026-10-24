@@ -22,6 +22,7 @@ tauri-plugin-opener = "2"
 tauri-plugin-dialog = "2.7.3"
 serde.workspace = true
 serde_json.workspace = true
+base64 = "0.22"
 thiserror.workspace = true
 notify = "8"
 notify-debouncer-mini = "0.6"

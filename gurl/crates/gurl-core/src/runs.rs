@@ -271,6 +271,32 @@ impl RunStore {
     }
 
     /// Full (untruncated) body of one response, taken from the in-memory result.
+    /// Raw body and `Content-Type` of one response, from the in-memory result.
+    pub fn response_bytes(
+        &self,
+        run_id: &str,
+        file: usize,
+        entry: usize,
+        call: usize,
+    ) -> Result<(Vec<u8>, Option<String>), RunError> {
+        let stored = self.stored.lock().unwrap();
+        stored
+            .iter()
+            .find(|r| r.id == run_id)
+            .and_then(|run| run.executed.get(file)?.as_ref())
+            .and_then(|ex| ex.result.entries.get(entry)?.calls.get(call))
+            .map(|c| {
+                let ct = c
+                    .response
+                    .headers
+                    .iter()
+                    .find(|h| h.name.eq_ignore_ascii_case("content-type"))
+                    .map(|h| h.value.clone());
+                (c.response.body.clone(), ct)
+            })
+            .ok_or(RunError::NotInMemory)
+    }
+
     pub fn response_body(
         &self,
         run_id: &str,

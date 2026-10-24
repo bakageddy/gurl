@@ -62,6 +62,21 @@ fn body(out: &mut String, b: &BodyM) {
     }
 }
 
+/// One `[Captures]` line, without the newline.
+pub fn capture_line(c: &CaptureM) -> String {
+    let mut line = format!("{}: {}", c.name, query(&c.query, &c.filters));
+    if c.redacted {
+        line.push_str(" redact");
+    }
+    line
+}
+
+/// One `[Asserts]` line, without the newline.
+pub fn assert_line(a: &AssertM) -> String {
+    let not = if a.not { "not" } else { "" };
+    join(&[&query(&a.query, &a.filters), not, &a.func, &a.value])
+}
+
 pub fn emit(doc: &HurlDoc) -> String {
     let mut out = String::new();
     for (i, e) in doc.entries.iter().enumerate() {
@@ -122,24 +137,14 @@ pub fn emit(doc: &HurlDoc) -> String {
             if !resp.captures.is_empty() {
                 section(&mut out, "Captures");
                 for c in &resp.captures {
-                    let mut line = format!("{}: {}", c.name, query(&c.query, &c.filters));
-                    if c.redacted {
-                        line.push_str(" redact");
-                    }
-                    out.push_str(&line);
+                    out.push_str(&capture_line(c));
                     out.push('\n');
                 }
             }
             if !resp.asserts.is_empty() {
                 section(&mut out, "Asserts");
                 for a in &resp.asserts {
-                    let not = if a.not { "not" } else { "" };
-                    out.push_str(&join(&[
-                        &query(&a.query, &a.filters),
-                        not,
-                        &a.func,
-                        &a.value,
-                    ]));
+                    out.push_str(&assert_line(a));
                     out.push('\n');
                 }
             }

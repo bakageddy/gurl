@@ -11,7 +11,7 @@ use tauri_plugin_opener::OpenerExt;
 mod error;
 
 use error::{Error, Result};
-use gurl_core::{emit, model, parse, runs, workspace};
+use gurl_core::{edit, emit, model, parse, query, runs, workspace};
 use workspace::{EffectiveVar, EnvVar, Node};
 
 #[derive(Default)]
@@ -298,6 +298,70 @@ fn get_response_body(
     Ok(state.runs.response_body(&run_id, file, entry, call)?)
 }
 
+/// JSONPath / XPath preview on a response kept in memory (the body never crosses IPC).
+#[command]
+fn query_body(
+    state: State<'_, AppState>,
+    run_id: String,
+    file: usize,
+    entry: usize,
+    call: usize,
+    kind: query::QueryKind,
+    expr: String,
+) -> Result<query::QueryOutcome> {
+    let (body, content_type) = state.runs.response_bytes(&run_id, file, entry, call)?;
+    Ok(query::query(kind, &body, content_type.as_deref(), &expr))
+}
+
+/// Same preview on text the frontend already has (history runs keep only the body preview).
+#[command]
+fn query_text(
+    text: String,
+    content_type: Option<String>,
+    kind: query::QueryKind,
+    expr: String,
+) -> query::QueryOutcome {
+    query::query(kind, text.as_bytes(), content_type.as_deref(), &expr)
+}
+
+/// Raw bytes of a response (base64) with its content type, for image / binary previews.
+#[command]
+fn get_response_body_bytes(
+    state: State<'_, AppState>,
+    run_id: String,
+    file: usize,
+    entry: usize,
+    call: usize,
+) -> Result<BodyBytes> {
+    const LIMIT: usize = 8 * 1024 * 1024;
+    let (body, content_type) = state.runs.response_bytes(&run_id, file, entry, call)?;
+    use base64::Engine;
+    Ok(BodyBytes {
+        truncated: body.len() > LIMIT,
+        base64: base64::engine::general_purpose::STANDARD.encode(&body[..body.len().min(LIMIT)]),
+        content_type,
+    })
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct BodyBytes {
+    base64: String,
+    content_type: Option<String>,
+    truncated: bool,
+}
+
+/// Adds asserts / captures to entry `entry` (1-based) of `text` without reformatting anything else.
+#[command]
+fn add_response_items(
+    text: String,
+    entry: usize,
+    asserts: Vec<model::AssertM>,
+    captures: Vec<model::CaptureM>,
+) -> Result<edit::Edit> {
+    Ok(edit::add_response_items(&text, entry, &asserts, &captures)?)
+}
+
 #[command]
 fn list_runs(app: AppHandle) -> Result<Vec<runs::RunSummary>> {
     Ok(runs::list_history(&data_dir(&app)?))
@@ -401,6 +465,10 @@ pub fn run() {
             run_scope,
             cancel_run,
             get_response_body,
+            get_response_body_bytes,
+            query_body,
+            query_text,
+            add_response_items,
             list_runs,
             load_run,
             clear_runs,
