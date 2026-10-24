@@ -1,100 +1,83 @@
-import { invoke } from "@tauri-apps/api/core";
-import type { DirEntry, HurlRunOptions, RunResult, TreeEntry } from "../types";
+import { Channel, invoke } from "@tauri-apps/api/core";
+import type {
+  EffectiveVar,
+  EnvVar,
+  FileRun,
+  HurlDoc,
+  ParseOutcome,
+  ReportFormat,
+  RunEvent,
+  RunOptions,
+  RunSummary,
+  ScopeKind,
+  TreeNode,
+  WorkspaceInfo,
+} from "./types";
 
-function snakeCaseOpts(opts: HurlRunOptions): Record<string, unknown> {
-  return {
-    variables: opts.variables,
-    insecure: opts.insecure,
-    follow_location: opts.followLocation,
-    follow_location_trusted: opts.followLocationTrusted,
-    max_redirect: opts.maxRedirect,
-    compressed: opts.compressed,
-    timeout_ms: opts.timeoutMs,
-    connect_timeout_ms: opts.connectTimeoutMs,
-    retry: opts.retry,
-    retry_interval_ms: opts.retryIntervalMs,
-    delay_ms: opts.delayMs,
-    http_version: opts.httpVersion,
-    ip_resolve: opts.ipResolve,
-    user: opts.user,
-    user_agent: opts.userAgent,
-    proxy: opts.proxy,
-    no_proxy: opts.noProxy,
-    cacert_file: opts.cacertFile,
-    client_cert_file: opts.clientCertFile,
-    client_key_file: opts.clientKeyFile,
-    from_entry: opts.fromEntry,
-    to_entry: opts.toEntry,
-    fail_fast: opts.failFast,
-    no_assert: opts.noAssert,
-    skip: opts.skip,
-    use_cookie_store: opts.useCookieStore,
-    resolves: opts.resolves.split("\n").map((s) => s.trim()).filter(Boolean),
-    connects_to: opts.connectsTo.split("\n").map((s) => s.trim()).filter(Boolean),
-    verbosity: opts.verbosity,
+export const hurlVersion = () => invoke<string>("hurl_version");
+export const parseHurl = (text: string) => invoke<ParseOutcome>("parse_hurl", { text });
+export const emitHurl = (model: HurlDoc) => invoke<string>("emit_hurl", { model });
 
-    digest: opts.digest,
-    negotiate: opts.negotiate,
-    ntlm: opts.ntlm,
-    netrc: opts.netrc,
-    netrc_optional: opts.netrcOptional,
-    netrc_file: opts.netrcFile,
-    aws_sigv4: opts.awsSigv4,
+export const openWorkspace = (path: string) => invoke<WorkspaceInfo>("open_workspace", { path });
+export const closeWorkspace = () => invoke<void>("close_workspace");
+export const listDir = (path: string) => invoke<TreeNode[]>("list_dir", { path });
+export const createFile = (dir: string, name: string, content?: string) =>
+  invoke<string>("create_file", { dir, name, content });
+export const createDir = (parent: string, name: string) =>
+  invoke<string>("create_dir", { parent, name });
+export const renamePath = (path: string, newName: string) =>
+  invoke<string>("rename_path", { path, newName });
+export const deletePath = (path: string) => invoke<void>("delete_path", { path });
+export const duplicatePath = (path: string) => invoke<string>("duplicate_path", { path });
+export const getDirVars = (dir: string) => invoke<EnvVar[]>("get_dir_vars", { dir });
+export const setDirVars = (dir: string, vars: EnvVar[]) =>
+  invoke<void>("set_dir_vars", { dir, vars });
+export const getEffectiveVars = (dir: string) =>
+  invoke<EffectiveVar[]>("get_effective_vars", { dir });
 
-    ssl_no_revoke: opts.sslNoRevoke,
-    path_as_is: opts.pathAsIs,
-    pinned_pub_key: opts.pinnedPubKey,
-    unix_socket: opts.unixSocket,
+export const readTextFile = (path: string) => invoke<string>("read_text_file", { path });
+export const writeTextFile = (path: string, content: string) =>
+  invoke<void>("write_text_file", { path, content });
+export const openFileDialog = () => invoke<string | null>("open_file_dialog");
+export const openFolderDialog = () => invoke<string | null>("open_folder_dialog");
 
-    max_send_speed: opts.maxSendSpeed,
-    max_recv_speed: opts.maxRecvSpeed,
-    repeat: opts.repeat,
-
-    allow_reuse: opts.allowReuse,
-  };
+export interface ScopeRequest {
+  kind: ScopeKind;
+  path?: string;
+  content?: string;
+  recursive?: boolean;
+  jobs?: number;
+  options: RunOptions;
 }
 
-export function hurlVersion(): Promise<string> {
-  return invoke("hurl_version");
+export function runScope(request: ScopeRequest, onEvent: (e: RunEvent) => void) {
+  const channel = new Channel<RunEvent>();
+  channel.onmessage = onEvent;
+  return invoke<RunSummary>("run_scope", { request, onEvent: channel });
 }
+export const cancelRun = (runId: string) => invoke<void>("cancel_run", { runId });
+export const getResponseBody = (runId: string, file: number, entry: number, call: number) =>
+  invoke<string>("get_response_body", { runId, file, entry, call });
+export const listRuns = () => invoke<RunSummary[]>("list_runs");
+export const loadRun = (runId: string) => invoke<FileRun[]>("load_run", { runId });
+export const clearRuns = () => invoke<void>("clear_runs");
+export const exportReport = (
+  runId: string,
+  format: ReportFormat,
+  open: boolean,
+  dir?: string,
+) => invoke<string>("export_report", { runId, format, dir, open });
 
-export function runHurlFile(
-  path: string,
-  options: HurlRunOptions
-): Promise<RunResult> {
-  return invoke("run_hurl_file", { path, options: snakeCaseOpts(options) });
-}
+export const getSettings = () => invoke<Record<string, unknown> | null>("get_settings");
+export const setSettings = (settings: Record<string, unknown>) =>
+  invoke<void>("set_settings", { settings });
 
-export function runHurlText(
-  content: string,
-  options: HurlRunOptions
-): Promise<RunResult> {
-  return invoke("run_hurl_text", {
-    content,
-    options: snakeCaseOpts(options),
-  });
+export interface DataFileStatus {
+  exists: boolean;
+  allowed: boolean;
 }
-
-export function openFileDialog(): Promise<string | null> {
-  return invoke("open_file_dialog");
-}
-
-export function openFolderDialog(): Promise<string | null> {
-  return invoke("open_folder_dialog");
-}
-
-export function readTextFile(path: string): Promise<string> {
-  return invoke("read_text_file", { path });
-}
-
-export function writeTextFile(path: string, content: string): Promise<void> {
-  return invoke("write_text_file", { request: { path, content } });
-}
-
-export function listDirectory(path: string): Promise<DirEntry[]> {
-  return invoke("list_directory", { path });
-}
-
-export function listDirectoryTree(path: string): Promise<TreeEntry[]> {
-  return invoke("list_directory_tree", { path });
-}
+/** Picks a data file inside the scenario's directory; returns a path relative to the .hurl file. */
+export const pickDataFile = (hurlPath: string) =>
+  invoke<string | null>("pick_data_file", { hurlPath });
+export const checkDataFile = (hurlPath: string, reference: string) =>
+  invoke<DataFileStatus>("check_data_file", { hurlPath, reference });

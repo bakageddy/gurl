@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Zurl
+Comment=A native-feeling GUI for HURL
+Exec=zurl
+Icon=zurl
+Terminal=false
+Categories=Development;Network;

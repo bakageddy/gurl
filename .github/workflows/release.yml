@@ -1,0 +1,225 @@
+# Tagged releases: pushing a tag like v0.2.0 builds every bundle and publishes
+# them as the GitHub release for that tag:
+#   - macOS     : .dmg for Apple Silicon (aarch64) AND Intel (x64)
+#   - Windows   : NSIS installer (.exe)
+#   - Ubuntu    : .deb + .AppImage per baseline (22.04 and 24.04), suffixed
+#                 _ubuntu-22.04 / _ubuntu-24.04 -- pick the one matching your host
+#   - Fedora    : .rpm built inside a real Fedora container (_fedora-42)
+#   - Arch      : binary tarball built inside an Arch container (_arch), plus
+#                 packaging/arch/PKGBUILD to build a proper pacman package
+#
+# Design notes (same rationale as the sps project's release workflow):
+#  - Releases are cut by TAG, not by pushes to main: `git tag v0.2.0 && git push --tags`.
+#    Every job releases under `github.ref_name`, so all bundles land in one release.
+#  - `permissions: contents: write` is what lets GITHUB_TOKEN create releases.
+#  - rust-cache gets a PER-MATRIX-LEG key: both Ubuntu legs share a job name and would
+#    otherwise share one cache, restoring 24.04's target/ onto 22.04 (E0463 can't find
+#    crate for `tauri`, because cargo fingerprints don't track system webkit/gtk).
+#  - BOTH Ubuntu baselines on purpose: a bundle built on 22.04 (GLib 2.72) breaks on
+#    24.04 hosts and vice versa.
+#  - An rpm built on Ubuntu is useless on Fedora, and Arch needs Arch's libraries, so
+#    those jobs run in distro containers. gh in a container gets GH_REPO + safe.directory
+#    because the checkout is owned by a different uid ("dubious ownership").
+#  - macOS: one runner builds both architectures (the Intel runner image is retired).
+#  - Bundles are unsigned: macOS users right-click -> Open the first time, Windows shows a
+#    SmartScreen notice. Signing requires paid certificates.
+
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+env:
+  APP_DIR: zurl
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            label: macos-aarch64
+            args: --target aarch64-apple-darwin --bundles dmg
+            rust-targets: aarch64-apple-darwin
+          - platform: macos-latest
+            label: macos-x64
+            args: --target x86_64-apple-darwin --bundles dmg
+            rust-targets: x86_64-apple-darwin
+          - platform: windows-latest
+            label: windows
+            args: --bundles nsis
+            rust-targets: ""
+          - platform: ubuntu-22.04
+            label: ubuntu-22.04
+            args: --bundles deb,appimage
+            rust-targets: ""
+          - platform: ubuntu-24.04
+            label: ubuntu-24.04
+            args: --bundles deb,appimage
+            rust-targets: ""
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: zurl/package-lock.json
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust-targets }}
+
+      # Caches target/ per matrix leg -- see the design notes for the E0463 this prevents.
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: zurl/src-tauri
+          key: ${{ matrix.label }}
+
+      - name: install linux system deps
+        if: startsWith(matrix.platform, 'ubuntu')
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file \
+            libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev patchelf
+
+      - run: npm ci
+        working-directory: zurl
+
+      # macOS/Windows: tauri-action builds AND uploads straight into the tag's release
+      # (filenames never collide across these jobs: aarch64 vs x64, dmg vs exe).
+      - uses: tauri-apps/tauri-action@v0
+        if: ${{ !startsWith(matrix.platform, 'ubuntu') }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: zurl
+          tagName: ${{ github.ref_name }}
+          releaseName: Zurl ${{ github.ref_name }}
+          releaseBody: See the commits since the previous tag for what changed.
+          releaseDraft: false
+          prerelease: false
+          args: ${{ matrix.args }}
+
+      # Linux: build ONLY -- both Ubuntu jobs produce identically named files, so we rename
+      # with the builder suffix and upload ourselves.
+      - uses: tauri-apps/tauri-action@v0
+        if: startsWith(matrix.platform, 'ubuntu')
+        with:
+          projectPath: zurl
+          args: ${{ matrix.args }}
+
+      - name: upload linux bundles (distro-suffixed)
+        if: startsWith(matrix.platform, 'ubuntu')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -e
+          shopt -s nullglob
+          mkdir -p out
+          for f in zurl/src-tauri/target/release/bundle/deb/*.deb \
+                   zurl/src-tauri/target/release/bundle/appimage/*.AppImage; do
+            base="$(basename "$f")"
+            cp "$f" "out/${base%.*}_${{ matrix.platform }}.${base##*.}"
+          done
+          # The release may not exist yet (created by whichever job gets there first;
+          # concurrent creates collapse into the || true).
+          gh release create "$TAG" --verify-tag --title "Zurl $TAG" \
+            --notes "See the commits since the previous tag for what changed." 2>/dev/null || true
+          gh release upload "$TAG" out/* --clobber
+
+  # A real Fedora RPM must be BUILT on Fedora: same runner, fedora container.
+  build-fedora-rpm:
+    runs-on: ubuntu-24.04
+    container: fedora:42
+    steps:
+      - name: install system deps
+        run: |
+          dnf install -y git gh curl wget file xz tar gzip gcc gcc-c++ make pkgconf-pkg-config \
+            webkit2gtk4.1-devel openssl-devel gtk3-devel libappindicator-gtk3-devel \
+            librsvg2-devel libxdo-devel rpm-build patchelf
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # Fedora's packaged rustc lags behind what the hurl crates need.
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: install frontend deps
+        run: npm ci
+        working-directory: zurl
+
+      - name: build rpm
+        run: npm run tauri build -- --bundles rpm
+        working-directory: zurl
+
+      - name: upload fedora rpm (suffixed)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # gh resolves the repo from this instead of shelling out to git, which would die on
+          # the container's uid mismatch with "detected dubious ownership in repository".
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -e
+          git config --global --add safe.directory "$GITHUB_WORKSPACE" || true
+          shopt -s nullglob
+          mkdir -p out
+          for f in zurl/src-tauri/target/release/bundle/rpm/*.rpm; do
+            base="$(basename "$f")"
+            cp "$f" "out/${base%.rpm}_fedora-42.rpm"
+          done
+          gh release create "$TAG" --verify-tag --title "Zurl $TAG" \
+            --notes "See the commits since the previous tag for what changed." 2>/dev/null || true
+          gh release upload "$TAG" out/* --clobber
+
+  # Arch has no Tauri bundler target. Build the release binary against Arch's own libraries
+  # and ship it as a tarball; packaging/arch/PKGBUILD builds a real pacman package from source.
+  build-arch:
+    runs-on: ubuntu-24.04
+    container: archlinux:latest
+    steps:
+      - name: install system deps
+        run: |
+          pacman -Syu --noconfirm --needed base-devel git github-cli curl wget file openssl \
+            webkit2gtk-4.1 gtk3 libappindicator-gtk3 librsvg xdotool nodejs npm patchelf
+
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: install frontend deps
+        run: npm ci
+        working-directory: zurl
+
+      - name: build binary
+        run: npm run tauri build -- --no-bundle
+        working-directory: zurl
+
+      - name: package and upload arch tarball
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -e
+          git config --global --add safe.directory "$GITHUB_WORKSPACE" || true
+          mkdir -p pkg/zurl out
+          install -m755 zurl/src-tauri/target/release/zurl pkg/zurl/zurl
+          install -m644 zurl/src-tauri/icons/128x128.png pkg/zurl/zurl.png
+          install -m644 packaging/zurl.desktop pkg/zurl/zurl.desktop
+          tar -C pkg -czf "out/zurl_${TAG#v}_x86_64_arch.tar.gz" zurl
+          gh release create "$TAG" --verify-tag --title "Zurl $TAG" \
+            --notes "See the commits since the previous tag for what changed." 2>/dev/null || true
+          gh release upload "$TAG" out/* --clobber

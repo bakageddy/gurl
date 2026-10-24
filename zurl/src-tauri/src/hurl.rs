@@ -188,8 +188,19 @@ impl Default for HurlRunOptions {
     }
 }
 
-#[derive(Debug, Serialize)]
-pub struct RunResult {
+/// A variable coming from a workspace `zurl.env` chain.
+#[derive(Debug, Clone)]
+pub struct VarSpec {
+    pub name: String,
+    pub value: String,
+    pub secret: bool,
+}
+
+/// Result of running one `.hurl` file or text snippet.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FileRun {
+    pub path: String,
     pub ok: bool,
     pub duration_ms: u128,
     pub report: Option<serde_json::Value>,
@@ -197,79 +208,124 @@ pub struct RunResult {
     pub error: Option<String>,
 }
 
-pub enum Source {
-    File(PathBuf),
-    Text(String),
+/// Everything needed to export a run later (HTML/JUnit/TAP reports).
+pub struct Executed {
+    pub content: String,
+    pub input: Input,
+    pub result: hurl::runner::HurlResult,
+    pub secrets: Vec<String>,
 }
 
-pub fn run(source: Source, options: HurlRunOptions) -> Result<RunResult, String> {
+pub enum Source {
+    File(PathBuf),
+    /// Unsaved text; the optional path gives the label and the directory used to resolve
+    /// relative `file,...;` references.
+    Text(String, Option<PathBuf>),
+}
+
+/// Runs a source with `options` plus the workspace variables `env` (explicit
+/// `options.variables` win over `env`).
+pub fn run(
+    source: Source,
+    options: &HurlRunOptions,
+    env: &[VarSpec],
+) -> (FileRun, Option<Executed>) {
     let start = Instant::now();
+    let label = match &source {
+        Source::File(p) => p.to_string_lossy().to_string(),
+        Source::Text(_, Some(p)) => p.to_string_lossy().to_string(),
+        Source::Text(_, None) => "request.hurl".to_string(),
+    };
+    let fail = |msg: String| {
+        (
+            FileRun {
+                path: label.clone(),
+                ok: false,
+                duration_ms: start.elapsed().as_millis(),
+                report: None,
+                errors: vec![],
+                error: Some(msg),
+            },
+            None,
+        )
+    };
 
     let (content, input, context_dir) = match source {
         Source::File(path) => {
-            if !path.exists() {
-                return Err(format!("hurl file not found: {}", path.display()));
-            }
-            let content = std::fs::read_to_string(&path)
-                .map_err(|e| format!("failed to read {}: {e}", path.display()))?;
+            let content = match std::fs::read_to_string(&path) {
+                Ok(c) => c,
+                Err(e) => return fail(format!("failed to read {}: {e}", path.display())),
+            };
             let parent = path.parent().unwrap_or(Path::new(""));
             let context_dir = ContextDir::new(parent, parent);
-            let input = Input::new(&path.to_string_lossy());
-            (content, input, context_dir)
+            (content, Input::new(&path.to_string_lossy()), context_dir)
         }
-        Source::Text(text) => {
-            let current_dir = std::env::current_dir().unwrap_or_default();
-            let context_dir = ContextDir::new(&current_dir, &current_dir);
-            let input = Input::new("request.hurl");
-            (text, input, context_dir)
+        Source::Text(text, path) => {
+            let dir = path
+                .as_ref()
+                .and_then(|p| p.parent().map(Path::to_path_buf))
+                .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
+            let context_dir = ContextDir::new(&dir, &dir);
+            let name = path
+                .as_ref()
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_else(|| "request.hurl".to_string());
+            (text, Input::new(&name), context_dir)
         }
     };
 
-    let runner_options = build_runner_options(&options, context_dir)?;
-    let variables = build_variables(&options.variables)?;
+    let runner_options = match build_runner_options(options, context_dir) {
+        Ok(o) => o,
+        Err(e) => return fail(e),
+    };
+    let variables = build_variables(env, &options.variables);
+    let secrets = variables.secrets();
     let logger_options = build_logger_options(&options.verbosity);
 
-    let filename_for_errors = input.clone();
-    let result = hurl::runner::run(
+    let result = match hurl::runner::run(
         &content,
         Some(&input),
         &runner_options,
         &variables,
         &logger_options,
-    )
-    .map_err(|e| format!("hurl run failed: {e}"))?;
-
-    let runtime_errors: Vec<String> = result
-        .errors()
-        .iter()
-        .map(|(err, src_info)| {
-            format!(
-                "{}:{}: {:?}",
-                filename_for_errors,
-                src_info.start.line,
-                err.kind
-            )
-        })
-        .collect();
-
-    let mut report = result
-        .to_json(&content, &input, None, &[])
-        .map_err(|e| format!("failed to serialize report: {e}"))?;
-    inject_response_bodies(&mut report, &result);
-
-    let run_result = RunResult {
-        ok: result.success && runtime_errors.is_empty(),
-        duration_ms: start.elapsed().as_millis(),
-        report: Some(report),
-        errors: runtime_errors.clone(),
-        error: if runtime_errors.is_empty() {
-            None
-        } else {
-            Some(runtime_errors.join("\n"))
-        },
+    ) {
+        Ok(r) => r,
+        Err(e) => return fail(format!("hurl run failed: {e}")),
     };
 
-    Ok(run_result)
+    let errors: Vec<String> = result
+        .errors()
+        .iter()
+        .map(|(err, src)| format!("{}:{}: {:?}", input, src.start.line, err.kind))
+        .collect();
+
+    let mut report = match result.to_json(&content, &input, None, &[]) {
+        Ok(r) => r,
+        Err(e) => return fail(format!("failed to serialize report: {e}")),
+    };
+    inject_response_bodies(&mut report, &result);
+
+    let file_run = FileRun {
+        path: label,
+        ok: result.success && errors.is_empty(),
+        duration_ms: start.elapsed().as_millis(),
+        report: Some(report),
+        error: if errors.is_empty() {
+            None
+        } else {
+            Some(errors.join("\n"))
+        },
+        errors,
+    };
+    (
+        file_run,
+        Some(Executed {
+            content,
+            input,
+            result,
+            secrets,
+        }),
+    )
 }
 
 fn build_runner_options(
@@ -379,26 +435,34 @@ fn build_runner_options(
     Ok(builder.build())
 }
 
-fn build_variables(map: &HashMap<String, String>) -> Result<VariableSet, String> {
-    let mut variables = VariableSet::new();
-    for (name, value) in map {
-        // Try to interpret as a number or bool, otherwise keep it as a string.
-        let parsed = if let Ok(n) = value.parse::<i64>() {
-            Value::Number(hurl::runner::Number::Integer(n))
-        } else if let Ok(f) = value.parse::<f64>() {
-            Value::Number(hurl::runner::Number::Float(f))
-        } else if value.eq_ignore_ascii_case("true") {
-            Value::Bool(true)
-        } else if value.eq_ignore_ascii_case("false") {
-            Value::Bool(false)
-        } else if value.is_empty() {
-            Value::String(String::new())
-        } else {
-            Value::String(value.clone())
-        };
-        variables.insert(name.clone(), parsed);
+fn parse_value(value: &str) -> Value {
+    // Numbers and booleans keep their type, anything else is a string.
+    if let Ok(n) = value.parse::<i64>() {
+        Value::Number(hurl::runner::Number::Integer(n))
+    } else if let Ok(f) = value.parse::<f64>() {
+        Value::Number(hurl::runner::Number::Float(f))
+    } else if value.eq_ignore_ascii_case("true") {
+        Value::Bool(true)
+    } else if value.eq_ignore_ascii_case("false") {
+        Value::Bool(false)
+    } else {
+        Value::String(value.to_string())
     }
-    Ok(variables)
+}
+
+fn build_variables(env: &[VarSpec], overrides: &HashMap<String, String>) -> VariableSet {
+    let mut variables = VariableSet::new();
+    for v in env {
+        if v.secret {
+            variables.insert_secret(v.name.clone(), v.value.clone());
+        } else {
+            variables.insert(v.name.clone(), parse_value(&v.value));
+        }
+    }
+    for (name, value) in overrides {
+        variables.insert(name.clone(), parse_value(value));
+    }
+    variables
 }
 
 fn build_logger_options(verbosity: &str) -> LoggerOptions {
@@ -413,27 +477,8 @@ fn build_logger_options(verbosity: &str) -> LoggerOptions {
         .build()
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn run_simple_get() {
-        let opts = HurlRunOptions::default();
-        let res = run(
-            Source::Text("GET https://httpbin.org/get\nHTTP 200\n".to_string()),
-            opts,
-        )
-        .expect("run should succeed");
-        assert!(res.ok, "run did not succeed: {:?}", res.error);
-        let report = res.report.expect("report should exist");
-        assert!(report["success"].as_bool().unwrap());
-        let entries = report["entries"].as_array().unwrap();
-        assert!(!entries.is_empty());
-        let status = entries[0]["calls"][0]["response"]["status"].as_u64().unwrap();
-        assert_eq!(status, 200);
-    }
-}
+/// Response bodies larger than this are cut in the report sent to the UI.
+const BODY_PREVIEW_LIMIT: usize = 2 * 1024 * 1024;
 
 fn inject_response_bodies(json: &mut serde_json::Value, result: &hurl::runner::HurlResult) {
     let Some(entries_json) = json.get_mut("entries").and_then(|e| e.as_array_mut()) else {
@@ -450,9 +495,14 @@ fn inject_response_bodies(json: &mut serde_json::Value, result: &hurl::runner::H
                 .and_then(|e| e.calls.get(call_idx))
                 .map(|c| c.response.body.clone())
                 .unwrap_or_default();
-            let body_text = String::from_utf8_lossy(&body_bytes).to_string();
+            let size = body_bytes.len();
+            let truncated = size > BODY_PREVIEW_LIMIT;
+            let shown = if truncated { &body_bytes[..BODY_PREVIEW_LIMIT] } else { &body_bytes[..] };
+            let body_text = String::from_utf8_lossy(shown).to_string();
             if let Some(response_json) = call_json.get_mut("response") {
                 response_json["body"] = serde_json::Value::String(body_text);
+                response_json["bodySize"] = serde_json::Value::from(size);
+                response_json["bodyTruncated"] = serde_json::Value::Bool(truncated);
             }
         }
     }

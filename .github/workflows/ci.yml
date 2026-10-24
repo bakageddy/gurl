@@ -1,0 +1,71 @@
+# Checks on every push / pull request: frontend type-check + build, backend tests and lints on
+# Linux, macOS and Windows.
+
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: zurl/package-lock.json
+      - run: npm ci
+        working-directory: zurl
+      - run: npm run check
+        working-directory: zurl
+      - run: npm run build
+        working-directory: zurl
+
+  backend:
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [ubuntu-22.04, ubuntu-24.04, macos-latest, windows-latest]
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: zurl/src-tauri
+          key: ${{ matrix.platform }}
+
+      - name: install linux system deps
+        if: startsWith(matrix.platform, 'ubuntu')
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file \
+            libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+
+      # tauri::generate_context! needs the frontend dist directory to exist.
+      - name: stub frontend dist
+        shell: bash
+        run: mkdir -p zurl/dist && touch zurl/dist/index.html
+
+      - name: test
+        run: cargo test --lib
+        working-directory: zurl/src-tauri
+
+      - name: clippy
+        run: cargo clippy --lib -- -D warnings
+        working-directory: zurl/src-tauri

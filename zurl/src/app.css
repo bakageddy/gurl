@@ -1,0 +1,396 @@
+@import "@fontsource-variable/inter/wght.css";
+@import "@fontsource/dejavu-mono/latin-400.css";
+@import "@fontsource/dejavu-mono/latin-700.css";
+
+/* GitHub Primer tokens. Light is the default; dark applies for the OS preference
+   (unless forced light) and when forced dark. */
+:root {
+  color-scheme: light;
+  --canvas: #ffffff;
+  --canvas-subtle: #f6f8fa;
+  --canvas-inset: #f6f8fa;
+  --canvas-overlay: #ffffff;
+  --border: #d0d7de;
+  --border-muted: #d8dee4;
+  --fg: #1f2328;
+  --fg-muted: #59636e;
+  --fg-subtle: #6e7781;
+  --accent: #0969da;
+  --accent-subtle: #ddf4ff;
+  --accent-emphasis: #0969da;
+  --success: #1a7f37;
+  --success-subtle: #dafbe1;
+  --success-emphasis: #1f883d;
+  --danger: #d1242f;
+  --danger-subtle: #ffebe9;
+  --attention: #9a6700;
+  --attention-subtle: #fff8c5;
+  --done: #8250df;
+  --btn-bg: #f6f8fa;
+  --btn-hover: #eef1f4;
+  --row-hover: rgba(208, 215, 222, 0.32);
+  --selection: rgba(9, 105, 218, 0.14);
+  --shadow: 0 8px 24px rgba(140, 149, 159, 0.2);
+  --sidebar-bg: #f6f8fa;
+  --titlebar-bg: #f6f8fa;
+  --syn-keyword: #cf222e;
+  --syn-string: #0a3069;
+  --syn-number: #0550ae;
+  --syn-comment: #6e7781;
+  --syn-fn: #8250df;
+  --syn-prop: #116329;
+  --syn-var: #953800;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --canvas: #0d1117;
+    --canvas-subtle: #161b22;
+    --canvas-inset: #010409;
+    --canvas-overlay: #161b22;
+    --border: #30363d;
+    --border-muted: #21262d;
+    --fg: #e6edf3;
+    --fg-muted: #9198a1;
+    --fg-subtle: #6e7681;
+    --accent: #4493f8;
+    --accent-subtle: rgba(56, 139, 253, 0.15);
+    --accent-emphasis: #1f6feb;
+    --success: #3fb950;
+    --success-subtle: rgba(46, 160, 67, 0.15);
+    --success-emphasis: #238636;
+    --danger: #f85149;
+    --danger-subtle: rgba(248, 81, 73, 0.15);
+    --attention: #d29922;
+    --attention-subtle: rgba(187, 128, 9, 0.15);
+    --done: #ab7df8;
+    --btn-bg: #21262d;
+    --btn-hover: #30363d;
+    --row-hover: rgba(110, 118, 129, 0.16);
+    --selection: rgba(56, 139, 253, 0.25);
+    --shadow: 0 8px 24px rgba(1, 4, 9, 0.6);
+    --sidebar-bg: #010409;
+    --titlebar-bg: #161b22;
+    --syn-keyword: #ff7b72;
+    --syn-string: #a5d6ff;
+    --syn-number: #79c0ff;
+    --syn-comment: #8b949e;
+    --syn-fn: #d2a8ff;
+    --syn-prop: #7ee787;
+    --syn-var: #ffa657;
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --canvas: #0d1117;
+  --canvas-subtle: #161b22;
+  --canvas-inset: #010409;
+  --canvas-overlay: #161b22;
+  --border: #30363d;
+  --border-muted: #21262d;
+  --fg: #e6edf3;
+  --fg-muted: #9198a1;
+  --fg-subtle: #6e7681;
+  --accent: #4493f8;
+  --accent-subtle: rgba(56, 139, 253, 0.15);
+  --accent-emphasis: #1f6feb;
+  --success: #3fb950;
+  --success-subtle: rgba(46, 160, 67, 0.15);
+  --success-emphasis: #238636;
+  --danger: #f85149;
+  --danger-subtle: rgba(248, 81, 73, 0.15);
+  --attention: #d29922;
+  --attention-subtle: rgba(187, 128, 9, 0.15);
+  --done: #ab7df8;
+  --btn-bg: #21262d;
+  --btn-hover: #30363d;
+  --row-hover: rgba(110, 118, 129, 0.16);
+  --selection: rgba(56, 139, 253, 0.25);
+  --shadow: 0 8px 24px rgba(1, 4, 9, 0.6);
+  --sidebar-bg: #010409;
+  --titlebar-bg: #161b22;
+  --syn-keyword: #ff7b72;
+  --syn-string: #a5d6ff;
+  --syn-number: #79c0ff;
+  --syn-comment: #8b949e;
+  --syn-fn: #d2a8ff;
+  --syn-prop: #7ee787;
+  --syn-var: #ffa657;
+}
+
+/* Type: macOS gets the system font (SF Pro) and Menlo; others bundled Inter / DejaVu Sans
+   Mono (the free ancestor of Menlo; Menlo itself is Apple-licensed and can't be shipped). */
+:root {
+  --font-ui: "Inter Variable", Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: Menlo, "DejaVu Mono", "SF Mono", Consolas, "Liberation Mono", monospace;
+  --radius: 6px;
+  --radius-lg: 10px;
+  --titlebar-h: 40px;
+}
+html.platform-mac {
+  --font-ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: var(--font-ui);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--fg);
+  background: var(--canvas);
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: "cv11", "ss03";
+  user-select: none;
+  -webkit-user-select: none;
+}
+/* With macOS vibrancy the window must be transparent behind the sidebar. */
+html.platform-mac body {
+  background: transparent;
+}
+input,
+textarea,
+.selectable,
+.cm-editor {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.mono,
+code,
+pre {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-variant-ligatures: none;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+button {
+  cursor: default;
+}
+
+::selection {
+  background: var(--selection);
+}
+
+/* Scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--fg-subtle) 45%, transparent) transparent;
+}
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--fg-subtle) 40%, transparent);
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--fg-subtle) 65%, transparent);
+  background-clip: content-box;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Controls */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--btn-bg);
+  font-weight: 500;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.btn:hover:not(:disabled) {
+  background: var(--btn-hover);
+}
+.btn:active:not(:disabled) {
+  filter: brightness(0.96);
+}
+.btn:disabled {
+  opacity: 0.5;
+}
+.btn.primary {
+  background: var(--success-emphasis);
+  border-color: color-mix(in srgb, var(--success-emphasis) 80%, #000);
+  color: #fff;
+}
+.btn.primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--success-emphasis) 88%, #000);
+}
+.btn.danger {
+  color: var(--danger);
+}
+.btn.sm {
+  height: 24px;
+  padding: 0 8px;
+  font-size: 11.5px;
+}
+.btn.ghost {
+  border-color: transparent;
+  background: transparent;
+}
+.btn.ghost:hover:not(:disabled) {
+  background: var(--row-hover);
+}
+.icon-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius);
+  border: 0;
+  background: transparent;
+  color: var(--fg-muted);
+  padding: 0;
+}
+.icon-btn:hover {
+  background: var(--row-hover);
+  color: var(--fg);
+}
+
+.field,
+select.field {
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--canvas);
+  outline: none;
+  min-width: 0;
+}
+textarea.field {
+  height: auto;
+  padding: 6px 8px;
+  resize: vertical;
+}
+.field:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-subtle);
+}
+.field.mono {
+  font-size: 12px;
+}
+select.field {
+  appearance: none;
+  padding-right: 22px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' fill='none' stroke='%238b949e' stroke-width='1.5'%3E%3Cpath d='m1 1 4 4 4-4'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 7px center;
+}
+
+.segmented {
+  display: inline-flex;
+  padding: 2px;
+  gap: 2px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--fg-subtle) 16%, transparent);
+}
+.segmented button {
+  height: 22px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--fg-muted);
+}
+.segmented button.active {
+  background: var(--canvas);
+  color: var(--fg);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18), 0 0 0 0.5px var(--border);
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid var(--border);
+  color: var(--fg-muted);
+}
+.badge.ok {
+  color: var(--success);
+  border-color: color-mix(in srgb, var(--success) 40%, transparent);
+  background: var(--success-subtle);
+}
+.badge.fail {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 40%, transparent);
+  background: var(--danger-subtle);
+}
+.badge.warn {
+  color: var(--attention);
+  border-color: color-mix(in srgb, var(--attention) 40%, transparent);
+  background: var(--attention-subtle);
+}
+
+.muted {
+  color: var(--fg-muted);
+}
+.subtle {
+  color: var(--fg-subtle);
+}
+.label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--fg-subtle);
+}
+
+.banner {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  font-size: 12px;
+}
+.banner.warn {
+  background: var(--attention-subtle);
+  border-color: color-mix(in srgb, var(--attention) 40%, transparent);
+}
+.banner.error {
+  background: var(--danger-subtle);
+  border-color: color-mix(in srgb, var(--danger) 40%, transparent);
+}
+.banner.info {
+  background: var(--accent-subtle);
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+}
