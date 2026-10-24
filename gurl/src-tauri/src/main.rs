@@ -13,6 +13,10 @@ fn main() {
             attach_console();
             exit(gurl_core::cli::hurl::main(&args[2..]));
         }
+        Some("import") => {
+            attach_console();
+            exit(gurl_core::cli::import::main(&args[2..]));
+        }
         Some("fmt") => {
             attach_console();
             exit(gurl_core::cli::fmt::main(&args[2..]));

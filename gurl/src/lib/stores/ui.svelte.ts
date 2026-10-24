@@ -27,6 +27,8 @@ class UI {
   menu = $state<{ x: number; y: number; items: MenuItem[] } | null>(null);
   toasts = $state<Array<{ id: number; text: string; kind: "info" | "error" }>>([]);
   settingsOpen = $state(false);
+  /** The import dialog, with the folder it writes into. */
+  importOpen = $state<{ dir: string } | null>(null);
   private seq = 0;
 
   ask(spec: PromptSpec): Promise<string | null> {

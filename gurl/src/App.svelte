@@ -10,6 +10,7 @@
   import ReportView from "./components/run/ReportView.svelte";
   import Overlays from "./components/Overlays.svelte";
   import SettingsDialog from "./components/SettingsDialog.svelte";
+  import ImportDialog from "./components/ImportDialog.svelte";
   import { nativeChrome } from "./lib/platform";
   import { settings } from "./lib/stores/settings.svelte";
   import { workspace } from "./lib/stores/workspace.svelte";
@@ -130,6 +131,7 @@
 {#if !nativeChrome}<ResizeEdges />{/if}
 <Overlays />
 <SettingsDialog />
+<ImportDialog />
 
 <style>
   .app {

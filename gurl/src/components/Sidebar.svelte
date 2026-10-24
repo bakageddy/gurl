@@ -6,16 +6,7 @@
   import { ui, type MenuItem } from "../lib/stores/ui.svelte";
   import { settings } from "../lib/stores/settings.svelte";
   import { basename, timeAgo, ms } from "../lib/format";
-  import {
-    deleteEntry,
-    duplicateEntry,
-    newFolder,
-    newScenario,
-    openWorkspaceDialog,
-    renameEntry,
-    runDirectory,
-    runFilePath,
-  } from "../lib/actions";
+  import { deleteEntry, duplicateEntry, newFolder, newScenario, openImport, openWorkspaceDialog, renameEntry, runDirectory, runFilePath } from "../lib/actions";
 
   interface Props {
     collapsed: boolean;
@@ -58,6 +49,7 @@
       items = [
         { label: "New scenario…", action: () => newScenario(p) },
         { label: "New folder…", action: () => newFolder(p) },
+        { label: "Import here…", action: () => openImport(p) },
         { label: "Variables…", action: () => tabs.openVars(p) },
         { label: "", action: () => {}, separator: true },
         { label: "Run this folder", action: () => runDirectory(p, false) },
@@ -86,6 +78,7 @@
     ui.openMenu(e, [
       { label: "New scenario…", action: () => newScenario(workspace.root) },
       { label: "New folder…", action: () => newFolder(workspace.root) },
+      { label: "Import…", action: () => openImport(workspace.root) },
       { label: "Variables…", action: () => tabs.openVars(workspace.root!) },
       { label: "Run workspace", action: () => runDirectory(workspace.root!, true) },
     ]);
@@ -102,6 +95,7 @@
     <div class="head-actions">
       <button class="icon-btn" title="New scenario" disabled={!workspace.root} onclick={() => newScenario()}><Icon name="file-plus" size={15} /></button>
       <button class="icon-btn" title="New folder" disabled={!workspace.root} onclick={() => newFolder()}><Icon name="folder-plus" size={15} /></button>
+      <button class="icon-btn" title="Import cURL / Postman / OpenCollection" disabled={!workspace.root} onclick={() => openImport()}><Icon name="download" size={15} /></button>
       <button class="icon-btn" title="Open workspace" onclick={openWorkspaceDialog}><Icon name="folder-open" size={15} /></button>
     </div>
   </div>

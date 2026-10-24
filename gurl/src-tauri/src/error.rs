@@ -32,6 +32,8 @@ pub enum Error {
     #[error(transparent)]
     Edit(#[from] gurl_core::edit::EditError),
     #[error(transparent)]
+    Import(#[from] gurl_core::import::ImportError),
+    #[error(transparent)]
     Tauri(#[from] tauri::Error),
     #[error("selected file is not a local path")]
     NotLocalPath(#[source] Box<dyn StdError + Send + Sync>),

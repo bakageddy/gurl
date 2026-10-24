@@ -88,6 +88,26 @@ export const queryBody = (runId: string, file: number, entry: number, call: numb
 export const queryText = (text: string, contentType: string | null, kind: QueryKind, expr: string) =>
   invoke<QueryOutcome>("query_text", { text, contentType, kind, expr });
 
+export type ImportKind = "curl" | "postman" | "opencollection";
+export interface ImportSource {
+  text?: string;
+  path?: string;
+}
+export interface ImportedFile {
+  relPath: string;
+  doc: HurlDoc;
+  text: string;
+}
+export interface ImportResult {
+  files: ImportedFile[];
+  envs: Array<{ relDir: string; fileName: string; vars: EnvVar[] }>;
+  warnings: string[];
+}
+export const importPreview = (kind: ImportKind, source: ImportSource, oneFile: boolean) =>
+  invoke<ImportResult>("import_preview", { kind, source, options: { oneFile } });
+export const importApply = (kind: ImportKind, source: ImportSource, oneFile: boolean, targetDir: string) =>
+  invoke<string[]>("import_apply", { kind, source, options: { oneFile }, targetDir });
+
 export interface TextEdit {
   text: string;
   firstLine: number;

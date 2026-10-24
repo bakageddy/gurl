@@ -18,6 +18,8 @@ A GUI for [HURL](https://hurl.dev), written in Tauri 2 (Rust) and Svelte 5. HURL
   engine, and **click-to-assert**: any JSON value, header, cookie, status, duration or TLS field becomes an assert
   (or a capture) in the scenario, inserted without touching the rest of the file.
 - **Reports** in the app, run history, and export of HURL's own HTML / JUnit / TAP / JSON reports.
+- **Import** cURL commands (paste "Copy as cURL"), Postman collections (v2.1) and OpenCollection YAML (bundled
+  file or Bruno's folder layout) into folders of `.hurl` files plus `gurl.env`; also `gurl import` on the command line.
 
 ## Install
 
@@ -51,6 +53,7 @@ gurl cli --test api/*.hurl             # exactly `hurl --test api/*.hurl`
 gurl cli --report-html out login.hurl  # every hurl option, HURL_* env var and exit code (0/1/2/3/4)
 gurl --version                         # gURL, HURL, libcurl/libxml2 versions and how they are linked
 gurl fmt --check .                     # `hurlfmt` (format / --in-place / --out json|html / --in curl); directories expand to every .hurl
+pbpaste | gurl import curl -           # cURL / Postman / OpenCollection → HURL (prints, or --out DIR writes the files)
 ```
 
 `gurl cli` adds the workspace to hurl: for each file it finds the topmost parent directory holding a `gurl.env`

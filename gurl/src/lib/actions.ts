@@ -116,6 +116,15 @@ export async function runActive() {
   if (t?.kind === "doc") await t.execute(t.path ? "file" : "text");
 }
 
+/** Opens the import dialog targeting `dir` (default: the selected folder). */
+export function openImport(dir: string | null = workspace.targetDir()) {
+  if (!dir) {
+    ui.toast("Open a workspace first", "error");
+    return;
+  }
+  ui.importOpen = { dir };
+}
+
 /// hurlfmt's formatting of the active scenario's text (the builder view is already canonical).
 export async function formatActive() {
   const t = tabs.active;

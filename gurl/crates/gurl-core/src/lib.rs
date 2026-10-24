@@ -6,6 +6,7 @@ pub mod edit;
 pub mod emit;
 pub mod error;
 pub mod hurl;
+pub mod import;
 pub mod model;
 pub mod parse;
 pub mod query;

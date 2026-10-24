@@ -11,7 +11,7 @@ use tauri_plugin_opener::OpenerExt;
 mod error;
 
 use error::{Error, Result};
-use gurl_core::{edit, emit, model, parse, query, runs, workspace};
+use gurl_core::{edit, emit, import, model, parse, query, runs, workspace};
 use workspace::{EffectiveVar, EnvVar, Node};
 
 #[derive(Default)]
@@ -362,6 +362,34 @@ fn add_response_items(
     Ok(edit::add_response_items(&text, entry, &asserts, &captures)?)
 }
 
+/// Converts a cURL / Postman / OpenCollection source into HURL files without writing anything.
+#[command]
+fn import_preview(
+    kind: import::ImportKind,
+    source: import::ImportSource,
+    options: import::ImportOptions,
+) -> Result<import::ImportResult> {
+    Ok(import::import(kind, &source, &options)?)
+}
+
+/// Same conversion, written below `target_dir` (inside the workspace); refuses to overwrite.
+#[command]
+fn import_apply(
+    state: State<'_, AppState>,
+    kind: import::ImportKind,
+    source: import::ImportSource,
+    options: import::ImportOptions,
+    target_dir: String,
+) -> Result<Vec<String>> {
+    let root = state.root()?;
+    let result = import::import(kind, &source, &options)?;
+    let paths = import::write(&result, &root, Path::new(&target_dir))?;
+    Ok(paths
+        .into_iter()
+        .map(|p| p.to_string_lossy().to_string())
+        .collect())
+}
+
 #[command]
 fn list_runs(app: AppHandle) -> Result<Vec<runs::RunSummary>> {
     Ok(runs::list_history(&data_dir(&app)?))
@@ -469,6 +497,8 @@ pub fn run() {
             query_body,
             query_text,
             add_response_items,
+            import_preview,
+            import_apply,
             list_runs,
             load_run,
             clear_runs,
