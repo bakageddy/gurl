@@ -1,0 +1,4 @@
+[submodule "gurl/vendor/hurl"]
+	path = gurl/vendor/hurl
+	url = https://github.com/Orange-OpenSource/hurl
+	shallow = true

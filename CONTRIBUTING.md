@@ -31,6 +31,15 @@ sudo pacman -S --needed base-devel webkit2gtk-4.1 gtk3 libappindicator-gtk3 libr
 **macOS**: install the Xcode command line tools (`xcode-select --install`).
 **Windows**: install the Visual Studio C++ build tools; WebView2 ships with Windows 11.
 
+HURL is vendored as a git submodule (`gurl/vendor/hurl`, pinned to tag `8.0.1`) because the published
+`hurl` crate can't build on Windows (its build script references an icon that only exists in HURL's repo).
+Clone with submodules:
+
+```sh
+git clone --recurse-submodules https://github.com/bakageddy/gurl
+# already cloned? git submodule update --init
+```
+
 Then:
 
 ```sh
@@ -56,6 +65,7 @@ gurl/
     hurl.rs                 runner options + one run, built on the hurl crate
     lib.rs                  Tauri commands, app state, file watcher
   src-tauri/fixtures/       HURL files used by the round-trip tests
+  vendor/hurl/              HURL source (git submodule, tag 8.0.1)
 assets/                     app icon source (icon.svg -> icon-1024.png)
 packaging/                  desktop entry and Arch PKGBUILD
 ```
@@ -117,6 +127,15 @@ git tag v0.2.0 && git push origin v0.2.0
 | Arch | `.tar.gz` binary; `packaging/arch/PKGBUILD` builds a pacman package |
 
 Bundles are unsigned (right-click -> Open on macOS, SmartScreen notice on Windows).
+
+## Updating HURL
+
+```sh
+cd gurl/vendor/hurl && git fetch --depth 1 origin tag <new-version> && git checkout <new-version>
+cd ../.. && git add vendor/hurl
+```
+
+Then fix any API changes in `src-tauri/src/hurl.rs` and `parse.rs`, and update the tag in `packaging/arch/PKGBUILD`.
 
 ## App icon
 

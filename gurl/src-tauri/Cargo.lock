@@ -1815,8 +1815,6 @@ checksum = "6dbf3de79e51f3d586ab4cb9d5c3e2c14aa28ed23d180cf89b4df0454a69cc87"
 [[package]]
 name = "hurl"
 version = "8.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ecf3f420a81c1ee22868fba85872fb7146bd4f4bc1185de579655a4c71849e8a"
 dependencies = [
  "base64 0.22.1",
  "brotli",
@@ -1847,8 +1845,6 @@ dependencies = [
 [[package]]
 name = "hurl_core"
 version = "8.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3ace5cb03666c35e8576fcca8d88042285f6bf9c183523de576adb18713ae88a"
 dependencies = [
  "colored",
  "libxml",

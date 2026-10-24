@@ -13,6 +13,13 @@ makedepends=('rust' 'nodejs' 'npm' 'git' 'pkgconf')
 source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
 sha256sums=('SKIP')
 
+prepare() {
+  # Release tarballs don't include submodules: fetch HURL at the pinned tag (gurl/vendor/hurl).
+  cd "$pkgname-$pkgver"
+  rm -rf gurl/vendor/hurl
+  git clone --depth 1 --branch 8.0.1 https://github.com/Orange-OpenSource/hurl gurl/vendor/hurl
+}
+
 build() {
   cd "$pkgname-$pkgver/gurl"
   npm ci
