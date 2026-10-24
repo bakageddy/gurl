@@ -11,6 +11,16 @@ on:
 permissions:
   contents: read
 
+env:
+  # Debug output on every run. RUST_BACKTRACE/cargo/npm/tauri verbosity work from here; GitHub's
+  # own ACTIONS_STEP_DEBUG / ACTIONS_RUNNER_DEBUG are only guaranteed when set as repository
+  # variables (Settings -> Secrets and variables -> Actions -> Variables), so set them there too.
+  ACTIONS_STEP_DEBUG: "true"
+  ACTIONS_RUNNER_DEBUG: "true"
+  RUST_BACKTRACE: full
+  CARGO_TERM_VERBOSE: "true"
+  NPM_CONFIG_LOGLEVEL: verbose
+
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -29,7 +39,7 @@ jobs:
         working-directory: zurl
       - run: npm run check
         working-directory: zurl
-      - run: npm run build
+      - run: npm run build -- --debug
         working-directory: zurl
 
   backend:
@@ -63,7 +73,7 @@ jobs:
         run: mkdir -p zurl/dist && touch zurl/dist/index.html
 
       - name: test
-        run: cargo test --lib
+        run: cargo test --lib -- --nocapture
         working-directory: zurl/src-tauri
 
       - name: clippy

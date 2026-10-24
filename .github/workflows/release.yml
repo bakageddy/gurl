@@ -34,7 +34,14 @@ permissions:
   contents: write
 
 env:
-  APP_DIR: zurl
+  # Debug output on every run. RUST_BACKTRACE/cargo/npm/tauri verbosity work from here; GitHub's
+  # own ACTIONS_STEP_DEBUG / ACTIONS_RUNNER_DEBUG are only guaranteed when set as repository
+  # variables (Settings -> Secrets and variables -> Actions -> Variables), so set them there too.
+  ACTIONS_STEP_DEBUG: "true"
+  ACTIONS_RUNNER_DEBUG: "true"
+  RUST_BACKTRACE: full
+  CARGO_TERM_VERBOSE: "true"
+  NPM_CONFIG_LOGLEVEL: verbose
 
 jobs:
   build:
@@ -44,23 +51,23 @@ jobs:
         include:
           - platform: macos-latest
             label: macos-aarch64
-            args: --target aarch64-apple-darwin --bundles dmg
+            args: --target aarch64-apple-darwin --bundles dmg --verbose
             rust-targets: aarch64-apple-darwin
           - platform: macos-latest
             label: macos-x64
-            args: --target x86_64-apple-darwin --bundles dmg
+            args: --target x86_64-apple-darwin --bundles dmg --verbose
             rust-targets: x86_64-apple-darwin
           - platform: windows-latest
             label: windows
-            args: --bundles nsis
+            args: --bundles nsis --verbose
             rust-targets: ""
           - platform: ubuntu-22.04
             label: ubuntu-22.04
-            args: --bundles deb,appimage
+            args: --bundles deb,appimage --verbose
             rust-targets: ""
           - platform: ubuntu-24.04
             label: ubuntu-24.04
-            args: --bundles deb,appimage
+            args: --bundles deb,appimage --verbose
             rust-targets: ""
     runs-on: ${{ matrix.platform }}
     steps:
@@ -161,7 +168,7 @@ jobs:
         working-directory: zurl
 
       - name: build rpm
-        run: npm run tauri build -- --bundles rpm
+        run: npm run tauri build -- --bundles rpm --verbose
         working-directory: zurl
 
       - name: upload fedora rpm (suffixed)
@@ -204,7 +211,7 @@ jobs:
         working-directory: zurl
 
       - name: build binary
-        run: npm run tauri build -- --no-bundle
+        run: npm run tauri build -- --no-bundle --verbose
         working-directory: zurl
 
       - name: package and upload arch tarball
