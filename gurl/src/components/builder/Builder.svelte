@@ -27,6 +27,10 @@
     tab.model!.entries.push(newEntry());
     touch();
   }
+  function addFirst() {
+    tab.model!.entries.unshift(newEntry());
+    touch();
+  }
 </script>
 
 <!-- input/change events from any nested form control bubble here and refresh the file text -->
@@ -56,6 +60,9 @@
       </div>
     {/if}
 
+    {#if tab.model.entries.length > 0}
+      <div class="top"><button class="btn sm add-top" onclick={addFirst} title="Insert a request before the first one"><Icon name="plus" size={12} /> Add request at top</button></div>
+    {/if}
     {#each tab.model.entries as _, i (i)}
       <EntryCard
         bind:entry={tab.model.entries[i]}
@@ -73,6 +80,12 @@
 </div>
 
 <style>
+  .top {
+    display: flex;
+    justify-content: flex-end;
+    padding: 0 0 2px;
+  }
+
   .builder {
     display: grid;
     gap: 12px;

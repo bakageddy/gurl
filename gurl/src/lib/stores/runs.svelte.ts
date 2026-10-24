@@ -15,6 +15,8 @@ export class RunState {
   summary = $state<RunSummary | null>(null);
   error = $state<string | null>(null);
   running = $state(true);
+  /** The scenario text that was run, when a tab started it (to warn if it changed since). */
+  sourceText: string | null = null;
 
   constructor(label: string) {
     this.label = label;

@@ -1,5 +1,7 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
 import type {
+  AssertM,
+  CaptureM,
   EffectiveVar,
   EnvVar,
   FileRun,
@@ -62,6 +64,37 @@ export function runScope(request: ScopeRequest, onEvent: (e: RunEvent) => void) 
 export const cancelRun = (runId: string) => invoke<void>("cancel_run", { runId });
 export const getResponseBody = (runId: string, file: number, entry: number, call: number) =>
   invoke<string>("get_response_body", { runId, file, entry, call });
+
+export interface BodyBytes {
+  base64: string;
+  contentType: string | null;
+  truncated: boolean;
+}
+export const getResponseBodyBytes = (runId: string, file: number, entry: number, call: number) =>
+  invoke<BodyBytes>("get_response_body_bytes", { runId, file, entry, call });
+
+export type QueryKind = "jsonpath" | "xpath";
+/** What hurl's own evaluator returns for a query; `kind` drives rendering and predicate choice. */
+export interface QueryOutcome {
+  kind: "none" | "single" | "list" | "number" | "bool" | "string" | "nodeset" | "error";
+  value: unknown;
+  /** `value` as JSON text with numbers exactly as the body spelled them. */
+  text: string;
+  count: number;
+  error: string | null;
+}
+export const queryBody = (runId: string, file: number, entry: number, call: number, kind: QueryKind, expr: string) =>
+  invoke<QueryOutcome>("query_body", { runId, file, entry, call, kind, expr });
+export const queryText = (text: string, contentType: string | null, kind: QueryKind, expr: string) =>
+  invoke<QueryOutcome>("query_text", { text, contentType, kind, expr });
+
+export interface TextEdit {
+  text: string;
+  firstLine: number;
+  added: number;
+}
+export const addResponseItems = (text: string, entry: number, asserts: AssertM[], captures: CaptureM[]) =>
+  invoke<TextEdit>("add_response_items", { text, entry, asserts, captures });
 export const listRuns = () => invoke<RunSummary[]>("list_runs");
 export const loadRun = (runId: string) => invoke<FileRun[]>("load_run", { runId });
 export const clearRuns = () => invoke<void>("clear_runs");

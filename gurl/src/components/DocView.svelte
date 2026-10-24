@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { setContext } from "svelte";
   import Icon from "./Icon.svelte";
   import Builder from "./builder/Builder.svelte";
   import TextEditor from "./LazyEditor.svelte";
@@ -8,10 +9,26 @@
   import { runs } from "../lib/stores/runs.svelte";
   import { formatActive, runActive, saveActive } from "../lib/actions";
   import { ms } from "../lib/format";
+  import { ASSERT_TARGET, type AssertTarget } from "../lib/assert-target";
 
   let { tab }: { tab: DocTab } = $props();
 
   let main = $state<HTMLDivElement>();
+  let editor = $state<{ revealLine: (n: number) => void } | null>(null);
+
+  // "Add assert" from this tab's own run result lands in this tab's text.
+  setContext<AssertTarget>(ASSERT_TARGET, {
+    enabled: () => !tab.run?.running,
+    reason: () => "Wait for the run to finish",
+    add: (entryIndex, items) => tab.addResponseItems(entryIndex, items),
+  });
+
+  $effect(() => {
+    const line = tab.pendingReveal;
+    if (line === null) return;
+    if (tab.mode === "text" && editor) editor.revealLine(line);
+    tab.pendingReveal = null;
+  });
 
   async function setMode(mode: "builder" | "text") {
     await tab.sync();
@@ -63,7 +80,7 @@
       {#if tab.mode === "builder"}
         <div class="scroll"><Builder {tab} /></div>
       {:else}
-        <TextEditor value={tab.text} diagnostics={tab.diagnostics} onchange={(v) => tab.setText(v)} />
+        <TextEditor bind:this={editor} value={tab.text} diagnostics={tab.diagnostics} onchange={(v) => tab.setText(v)} />
       {/if}
     </div>
     <div class="splitter" role="separator" aria-orientation="vertical" onpointerdown={startDrag}></div>

@@ -14,6 +14,9 @@ A GUI for [HURL](https://hurl.dev), written in Tauri 2 (Rust) and Svelte 5. HURL
 - **Text editor**: syntax highlighting and inline diagnostics, kept in sync with the visual builder.
 - **Run** a request, a scenario, a folder or a whole workspace (parallel). Inspect bodies, headers, cookies,
   asserts, captures, a timing waterfall, cURL and TLS details.
+- **Response tools**: pretty / raw / tree / preview views, search, a JSONPath / XPath box evaluated by HURL's own
+  engine, and **click-to-assert**: any JSON value, header, cookie, status, duration or TLS field becomes an assert
+  (or a capture) in the scenario, inserted without touching the rest of the file.
 - **Reports** in the app, run history, and export of HURL's own HTML / JUnit / TAP / JSON reports.
 
 ## Install

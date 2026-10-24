@@ -3,9 +3,9 @@
   import { EditorState, Compartment } from "@codemirror/state";
   import { EditorView, keymap, lineNumbers, highlightActiveLine, drawSelection, placeholder as cmPlaceholder } from "@codemirror/view";
   import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
-  import { bracketMatching, indentOnInput } from "@codemirror/language";
+  import { bracketMatching, codeFolding, foldGutter, indentOnInput } from "@codemirror/language";
   import { closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete";
-  import { searchKeymap, highlightSelectionMatches } from "@codemirror/search";
+  import { searchKeymap, highlightSelectionMatches, openSearchPanel } from "@codemirror/search";
   import { linter, type Diagnostic as CmDiagnostic } from "@codemirror/lint";
   import { json } from "@codemirror/lang-json";
   import { xml } from "@codemirror/lang-xml";
@@ -44,6 +44,19 @@
     return [];
   }
 
+  /** Opens CodeMirror's search panel (the toolbar's Search button). */
+  export function openSearch() {
+    if (view) openSearchPanel(view);
+  }
+
+  /** Scrolls to and selects the start of 1-based line `n`. */
+  export function revealLine(n: number) {
+    if (!view) return;
+    const line = view.state.doc.line(Math.max(1, Math.min(n, view.state.doc.lines)));
+    view.dispatch({ selection: { anchor: line.from }, effects: EditorView.scrollIntoView(line.from, { y: "center" }) });
+    view.focus();
+  }
+
   function toCm(doc: EditorState["doc"], ds: Diagnostic[]): CmDiagnostic[] {
     return ds.flatMap((d) => {
       if (d.line < 1 || d.line > doc.lines) return [];
@@ -66,6 +79,7 @@
         doc: value,
         extensions: [
           gutter ? lineNumbers() : [],
+          gutter && (lang === "json" || lang === "xml") ? [codeFolding(), foldGutter()] : [],
           history(),
           drawSelection(),
           indentOnInput(),

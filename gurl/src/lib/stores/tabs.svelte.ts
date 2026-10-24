@@ -1,5 +1,6 @@
 import { save as saveDialog } from "@tauri-apps/plugin-dialog";
-import { emitHurl, parseHurl, readTextFile, writeTextFile } from "../api";
+import { addResponseItems, emitHurl, parseHurl, readTextFile, writeTextFile } from "../api";
+import type { AssertItems } from "../assert-target";
 import type { Diagnostic, HurlDoc } from "../types";
 import { basename } from "../format";
 import type { RunState } from "./runs.svelte";
@@ -149,6 +150,23 @@ export class DocTab {
         : { kind: "file", path: this.path, content: this.dirty ? this.text : undefined },
       this.name,
     );
+    this.run.sourceText = this.text;
+  }
+
+  /** Line the text view should scroll to after an edit made outside the editor. */
+  pendingReveal = $state<number | null>(null);
+
+  /** Adds asserts / captures to entry `entryIndex` (1-based) by splicing the text, so comments
+   *  and formatting elsewhere survive in both views. */
+  async addResponseItems(entryIndex: number, items: AssertItems) {
+    await this.sync();
+    const changed = this.run?.sourceText != null && this.run.sourceText !== this.text;
+    const edit = await addResponseItems(this.text, entryIndex, items.asserts ?? [], items.captures ?? []);
+    this.setText(edit.text);
+    this.pendingReveal = edit.firstLine;
+    const what = items.captures?.length ? "capture" : "assert";
+    ui.toast(`Added ${edit.added} ${what}${edit.added === 1 ? "" : "s"} · line ${edit.firstLine}`);
+    if (changed) ui.toast("The file changed since this run: check that it landed on the right request");
   }
 }
 

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { setContext } from "svelte";
   import { open as openDialog } from "@tauri-apps/plugin-dialog";
   import Icon from "../Icon.svelte";
   import FileRunView from "./FileRunView.svelte";
@@ -9,10 +10,22 @@
   import { ui } from "../../lib/stores/ui.svelte";
   import { workspace } from "../../lib/stores/workspace.svelte";
   import type { ReportFormat } from "../../lib/types";
+  import { ASSERT_TARGET, type AssertTarget } from "../../lib/assert-target";
 
   let { run }: { run: RunState } = $props();
 
   let selected = $state(0);
+
+  // "Add assert" from a report opens the file and edits it there. Text runs have no file.
+  const isFile = (p: string | undefined) => !!p && (p.includes("/") || p.includes("\\"));
+  setContext<AssertTarget>(ASSERT_TARGET, {
+    enabled: () => !run.running && isFile(run.files[selected]),
+    reason: () => (run.running ? "Wait for the run to finish" : "Save the scenario first, then run it from the file"),
+    add: async (entryIndex, items) => {
+      const tab = await tabs.openFile(run.files[selected]);
+      if (tab?.kind === "doc") await tab.addResponseItems(entryIndex, items);
+    },
+  });
   const total = $derived(run.files.length);
   const done = $derived(run.states.filter((s) => s === "done").length);
   const maxDur = $derived(Math.max(1, ...run.results.map((r) => r?.durationMs ?? 0)));

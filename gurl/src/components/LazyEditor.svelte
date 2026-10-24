@@ -4,16 +4,25 @@
   import type TextEditorType from "./TextEditor.svelte";
 
   type Props = ComponentProps<typeof TextEditorType>;
+  type Commands = { openSearch?: () => void; revealLine?: (n: number) => void };
   let props: Props = $props();
-  let Editor = $state<Component<Props> | null>(null);
+  let Editor = $state<Component<Props, Commands> | null>(null);
+  let inner = $state<Commands | null>(null);
 
   $effect.pre(() => {
-    if (!Editor) import("./TextEditor.svelte").then((m) => (Editor = m.default as unknown as Component<Props>));
+    if (!Editor) import("./TextEditor.svelte").then((m) => (Editor = m.default as unknown as Component<Props, Commands>));
   });
+
+  export function openSearch() {
+    inner?.openSearch?.();
+  }
+  export function revealLine(n: number) {
+    inner?.revealLine?.(n);
+  }
 </script>
 
 {#if Editor}
-  <Editor {...props} />
+  <Editor bind:this={inner} {...props} />
 {:else}
   <div class="ph" style:min-height={props.minHeight}></div>
 {/if}

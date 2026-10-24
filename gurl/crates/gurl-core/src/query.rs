@@ -26,6 +26,8 @@ pub struct QueryOutcome {
     /// `nodeset` (XPath), or `error`.
     pub kind: &'static str,
     pub value: Option<serde_json::Value>,
+    /// `value` as JSON text, with numbers exactly as the body spelled them (JS would round them).
+    pub text: String,
     /// Elements of a JSONPath list / nodes of an XPath node set.
     pub count: usize,
     pub error: Option<String>,
@@ -36,8 +38,20 @@ impl QueryOutcome {
         QueryOutcome {
             kind: "error",
             value: None,
+            text: String::new(),
             count: 0,
             error: Some(msg.into()),
+        }
+    }
+
+    fn ok(kind: &'static str, value: Option<serde_json::Value>, count: usize) -> Self {
+        let text = value.as_ref().map(|v| v.to_string()).unwrap_or_default();
+        QueryOutcome {
+            kind,
+            value,
+            text,
+            count,
+            error: None,
         }
     }
 }
@@ -67,26 +81,11 @@ pub fn query_json(body: &[u8], expr: &str) -> QueryOutcome {
     };
     let mut results = q.eval(&json);
     match results.len() {
-        0 => QueryOutcome {
-            kind: "none",
-            value: None,
-            count: 0,
-            error: None,
-        },
-        1 => QueryOutcome {
-            kind: "single",
-            value: Some(results.remove(0)),
-            count: 1,
-            error: None,
-        },
+        0 => QueryOutcome::ok("none", None, 0),
+        1 => QueryOutcome::ok("single", Some(results.remove(0)), 1),
         n => {
             results.truncate(MAX_LIST);
-            QueryOutcome {
-                kind: "list",
-                value: Some(serde_json::Value::Array(results)),
-                count: n,
-                error: None,
-            }
+            QueryOutcome::ok("list", Some(serde_json::Value::Array(results)), n)
         }
     }
 }
@@ -125,38 +124,24 @@ pub fn query_xpath(body: &[u8], content_type: Option<&str>, expr: &str) -> Query
     // SAFETY: `object.ptr` is a valid xmlXPathObject owned by `object` for its lifetime.
     let raw = unsafe { &*object.ptr };
     match raw.type_ {
-        libxml::bindings::xmlXPathObjectType_XPATH_NUMBER => QueryOutcome {
-            kind: "number",
-            value: serde_json::Number::from_f64(raw.floatval).map(serde_json::Value::Number),
-            count: 1,
-            error: None,
-        },
-        libxml::bindings::xmlXPathObjectType_XPATH_BOOLEAN => QueryOutcome {
-            kind: "bool",
-            value: Some(serde_json::Value::Bool(raw.boolval != 0)),
-            count: 1,
-            error: None,
-        },
+        libxml::bindings::xmlXPathObjectType_XPATH_NUMBER => QueryOutcome::ok(
+            "number",
+            serde_json::Number::from_f64(raw.floatval).map(serde_json::Value::Number),
+            1,
+        ),
+        libxml::bindings::xmlXPathObjectType_XPATH_BOOLEAN => {
+            QueryOutcome::ok("bool", Some(serde_json::Value::Bool(raw.boolval != 0)), 1)
+        }
         libxml::bindings::xmlXPathObjectType_XPATH_STRING => {
             // SAFETY: a string XPath object always carries a NUL-terminated `stringval`.
             let s = unsafe { CStr::from_ptr(raw.stringval as *const c_char) }
                 .to_string_lossy()
                 .into_owned();
-            QueryOutcome {
-                kind: "string",
-                value: Some(serde_json::Value::String(s)),
-                count: 1,
-                error: None,
-            }
+            QueryOutcome::ok("string", Some(serde_json::Value::String(s)), 1)
         }
         libxml::bindings::xmlXPathObjectType_XPATH_NODESET => {
             let n = object.get_number_of_nodes();
-            QueryOutcome {
-                kind: "nodeset",
-                value: Some(serde_json::Value::from(n)),
-                count: n,
-                error: None,
-            }
+            QueryOutcome::ok("nodeset", Some(serde_json::Value::from(n)), n)
         }
         _ => QueryOutcome::error("unsupported XPath result"),
     }
@@ -237,7 +222,7 @@ mod tests {
             Some(json!("b"))
         );
         // serde_json's arbitrary_precision (enabled by hurl) keeps the number text as written.
-        assert_eq!(query_json(BODY, "$.n").value.unwrap().to_string(), "1.50");
+        assert_eq!(query_json(BODY, "$.n").text, "1.50");
         assert!(query_json(BODY, "$[").error.is_some());
         assert!(query_json(b"not json", "$").error.is_some());
     }
