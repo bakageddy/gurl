@@ -39,3 +39,8 @@ strip = true
 
 [target.'cfg(target_os = "macos")'.dependencies]
 window-vibrancy = "0.6"
+
+# HURL's build.rs embeds its own Windows icon/version resource, which collides with Tauri's at link
+# time (duplicate VERSION resource). Replace the winres helper with a no-op; see stubs/winres.
+[patch.crates-io]
+winres = { path = "../stubs/winres" }

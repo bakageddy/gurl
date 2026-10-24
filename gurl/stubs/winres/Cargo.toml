@@ -1,0 +1,6 @@
+[package]
+name = "winres"
+version = "0.1.12"
+edition = "2021"
+description = "No-op stand-in for the winres crate (see src/lib.rs)"
+publish = false
