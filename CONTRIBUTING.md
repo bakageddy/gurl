@@ -61,7 +61,10 @@ gurl/
     lib/types.ts            mirrors the Rust model (camelCase JSON)
     lib/hurl-schema.ts      tables that drive the builder forms (queries, filters, predicates, options)
     lib/stores/*.svelte.ts  state: workspace, tabs (model <-> text sync), runs, settings, ui
-    components/             Titlebar/chrome, Sidebar, DocView, builder/*, run/*, VarsPanel
+    components/             Titlebar/chrome, Sidebar, DocView, QuickBar, ImportDialog, builder/*, run/*, VarsPanel
+    components/run/         ResponseView (views, query bar, click-to-assert), JsonTree, QueryBar
+    lib/assert-gen.ts       JSON node / header / cookie -> HURL assert suggestions (vitest)
+    lib/json-tree.ts        JSON reader that keeps number text and gives every node its JSONPath (vitest)
   Cargo.toml                cargo workspace (version lives here, in [workspace.package])
   crates/gurl-core/src/     the engine, no GUI dependency (shared by the app and the CLI)
     cli/hurl/               `gurl cli`: hurl's CLI sources, forked (see cli/hurl/UPSTREAM.md) + workspace.rs
@@ -71,6 +74,10 @@ gurl/
     runs.rs                 run scopes (text/file/dir), streaming, history, HURL report export
     hurl.rs                 runner options + one run, built on the hurl crate
     error.rs                WorkspaceError / RunError (thiserror)
+    query.rs                jsonpath (hurl's own, compiled in from vendor) / xpath previews for the app
+    edit.rs                 lossless insertion of asserts/captures into a scenario's text
+    import/                 cURL, Postman v2.1 and OpenCollection importers -> HurlDoc + files
+    cli/fmt.rs, cli/import.rs  `gurl fmt` (hurlfmt) and `gurl import`
   crates/gurl-core/fixtures/ HURL files used by the round-trip tests
   src-tauri/src/
     lib.rs                  Tauri commands, app state, file watcher
@@ -98,6 +105,7 @@ packaging/                  desktop entry and Arch PKGBUILD
 ```sh
 cd gurl
 npm run check                       # svelte-check / TypeScript
+npm test                            # vitest: assert generation, JSON tree
 npm run build                       # production frontend build
 
 cargo test --workspace              # unit + round-trip + run/export tests
@@ -106,6 +114,13 @@ cargo fmt --all
 ```
 
 CI runs the same checks on Ubuntu 22.04/24.04, macOS and Windows (`.github/workflows/ci.yml`).
+
+### Manual check of the response tools
+
+Run `crates/gurl-core/fixtures/all.hurl` (or any scenario) and, from the result: switch Body between Pretty / Raw /
+Tree, filter the tree, open Query and type a `jsonpath` (or `xpath` on XML/HTML), then add asserts from a JSON node,
+a header, a cookie, the status and the duration, once in the builder view and once in the text view. The lines must
+land in the right entry, comments elsewhere must survive, and re-running must pass.
 
 ## Style
 
