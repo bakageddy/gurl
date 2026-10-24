@@ -2,6 +2,7 @@ use hurl::http::{
     CredentialForwarding, FollowLocation, IpResolve, RequestedHttpVersion,
 };
 use hurl::runner::{Output, RunnerOptions, RunnerOptionsBuilder, VariableSet, Value};
+use crate::error::{chain_message, RunError};
 use hurl_core::types::{BytesPerSec, Count};
 use hurl::util::logger::{LoggerOptions, LoggerOptionsBuilder, Verbosity};
 use hurl::util::path::ContextDir;
@@ -276,7 +277,7 @@ pub fn run(
 
     let runner_options = match build_runner_options(options, context_dir) {
         Ok(o) => o,
-        Err(e) => return fail(e),
+        Err(e) => return fail(chain_message(&e)),
     };
     let variables = build_variables(env, &options.variables);
     let secrets = variables.secrets();
@@ -329,10 +330,14 @@ pub fn run(
     )
 }
 
+fn count(name: &'static str, n: i32) -> Result<Count, RunError> {
+    Count::try_from(n).map_err(|reason| RunError::InvalidOption { name, reason })
+}
+
 fn build_runner_options(
     options: &HurlRunOptions,
     context_dir: ContextDir,
-) -> Result<RunnerOptions, String> {
+) -> Result<RunnerOptions, RunError> {
     let mut builder = RunnerOptionsBuilder::new();
 
     builder
@@ -342,10 +347,10 @@ fn build_runner_options(
         .compressed(options.compressed)
         .timeout(Duration::from_millis(options.timeout_ms))
         .connect_timeout(Duration::from_millis(options.connect_timeout_ms))
-        .retry(Some(Count::try_from(options.retry).map_err(|e| e.to_string())?))
+        .retry(Some(count("retry", options.retry)?))
         .retry_interval(Duration::from_millis(options.retry_interval_ms))
         .delay(Duration::from_millis(options.delay_ms))
-        .max_redirect(Count::try_from(options.max_redirect).map_err(|e| e.to_string())?)
+        .max_redirect(count("max_redirect", options.max_redirect)?)
         .fail_fast(options.fail_fast)
         .no_assert(options.no_assert)
         .skip(options.skip)
@@ -418,7 +423,7 @@ fn build_runner_options(
         builder.unix_socket(Some(sock.clone()));
     }
 
-    builder.repeat(Some(Count::try_from(options.repeat).map_err(|e| e.to_string())?));
+    builder.repeat(Some(count("repeat", options.repeat)?));
 
     if let Some(v) = options.max_send_speed.filter(|v| *v > 0) {
         builder.max_send_speed(Some(BytesPerSec(v)));

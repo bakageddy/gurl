@@ -2,6 +2,7 @@
 //! history and exporting HURL's own reports.
 
 use crate::hurl::{self, Executed, FileRun, HurlRunOptions, Source, VarSpec};
+use crate::error::RunError;
 use crate::workspace;
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
@@ -124,7 +125,7 @@ impl RunStore {
         root: Option<PathBuf>,
         req: ScopeRequest,
         channel: &Channel<RunEvent>,
-    ) -> Result<RunSummary, String> {
+    ) -> Result<RunSummary, RunError> {
         let started = Instant::now();
         let started_at = now_secs();
         let id = new_run_id();
@@ -138,18 +139,18 @@ impl RunStore {
                 req.content.clone(),
             )],
             "file" => {
-                let p = PathBuf::from(req.path.clone().ok_or("missing path")?);
+                let p = PathBuf::from(req.path.clone().ok_or(RunError::MissingPath)?);
                 vec![(p, req.content.clone())]
             }
             "dir" => {
-                let dir = PathBuf::from(req.path.clone().ok_or("missing path")?);
+                let dir = PathBuf::from(req.path.clone().ok_or(RunError::MissingPath)?);
                 let base = root.clone().unwrap_or_else(|| dir.clone());
                 workspace::collect_hurl_files(&base, &dir, req.recursive)?
                     .into_iter()
                     .map(|p| (p, None))
                     .collect()
             }
-            other => return Err(format!("unknown run kind: {other}")),
+            other => return Err(RunError::UnknownKind(other.to_string())),
         };
         let label = match req.kind.as_str() {
             "dir" => req.path.clone().unwrap_or_default(),
@@ -261,21 +262,24 @@ impl RunStore {
     }
 
     /// Full (untruncated) body of one response, taken from the in-memory result.
-    pub fn response_body(&self, run_id: &str, file: usize, entry: usize, call: usize) -> Option<String> {
+    pub fn response_body(&self, run_id: &str, file: usize, entry: usize, call: usize) -> Result<String, RunError> {
         let stored = self.stored.lock().unwrap();
-        let run = stored.iter().find(|r| r.id == run_id)?;
-        let ex = run.executed.get(file)?.as_ref()?;
-        let c = ex.result.entries.get(entry)?.calls.get(call)?;
-        Some(String::from_utf8_lossy(&c.response.body).to_string())
+        let body = stored
+            .iter()
+            .find(|r| r.id == run_id)
+            .and_then(|run| run.executed.get(file)?.as_ref())
+            .and_then(|ex| ex.result.entries.get(entry)?.calls.get(call))
+            .map(|c| String::from_utf8_lossy(&c.response.body).to_string());
+        body.ok_or(RunError::NotInMemory)
     }
 
-    pub fn export(&self, run_id: &str, format: &str, dir: &Path) -> Result<PathBuf, String> {
+    pub fn export(&self, run_id: &str, format: &str, dir: &Path) -> Result<PathBuf, RunError> {
         let stored = self.stored.lock().unwrap();
         let run = stored
             .iter()
             .find(|r| r.id == run_id)
-            .ok_or("run is no longer in memory; re-run to export")?;
-        std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+            .ok_or(RunError::NotInMemory)?;
+        std::fs::create_dir_all(dir).map_err(RunError::io("cannot create", dir))?;
         let items: Vec<&Executed> = run.executed.iter().flatten().collect();
         let secrets: Vec<&str> = items
             .iter()
@@ -288,10 +292,10 @@ impl RunStore {
                 for ex in &items {
                     let tc = Testcase::from(&ex.result, &ex.input);
                     tc.write_html(&ex.content, &ex.result.entries, dir, &secrets)
-                        .map_err(|e| e.to_string())?;
+                        .map_err(RunError::report)?;
                     cases.push(tc);
                 }
-                write_report(dir, &cases).map_err(|e| e.to_string())?;
+                write_report(dir, &cases).map_err(RunError::report)?;
                 Ok(dir.join("index.html"))
             }
             "junit" => {
@@ -302,7 +306,7 @@ impl RunStore {
                     .collect();
                 let file = dir.join("junit.xml");
                 let _ = std::fs::remove_file(&file);
-                write_report(&file, &cases, &secrets).map_err(|e| e.to_string())?;
+                write_report(&file, &cases, &secrets).map_err(RunError::report)?;
                 Ok(file)
             }
             "tap" => {
@@ -313,16 +317,16 @@ impl RunStore {
                     .collect();
                 let file = dir.join("report.tap");
                 let _ = std::fs::remove_file(&file);
-                write_report(&file, &cases).map_err(|e| e.to_string())?;
+                write_report(&file, &cases).map_err(RunError::report)?;
                 Ok(file)
             }
             "json" => {
                 let file = dir.join("report.json");
-                let text = serde_json::to_string_pretty(&run.runs).map_err(|e| e.to_string())?;
-                std::fs::write(&file, text).map_err(|e| e.to_string())?;
+                let text = serde_json::to_string_pretty(&run.runs)?;
+                std::fs::write(&file, text).map_err(RunError::io("cannot write", &file))?;
                 Ok(file)
             }
-            other => Err(format!("unknown report format: {other}")),
+            other => Err(RunError::UnknownFormat(other.to_string())),
         }
     }
 }
@@ -355,13 +359,13 @@ pub fn save_history(data_dir: &Path, summary: &RunSummary, runs: &[FileRun]) {
     }
 }
 
-pub fn load_history_run(data_dir: &Path, id: &str) -> Result<serde_json::Value, String> {
+pub fn load_history_run(data_dir: &Path, id: &str) -> Result<serde_json::Value, RunError> {
     if !id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
-        return Err("invalid run id".into());
+        return Err(RunError::InvalidRunId);
     }
-    let text = std::fs::read_to_string(data_dir.join("runs").join(format!("{id}.json")))
-        .map_err(|e| e.to_string())?;
-    serde_json::from_str(&text).map_err(|e| e.to_string())
+    let file = data_dir.join("runs").join(format!("{id}.json"));
+    let text = std::fs::read_to_string(&file).map_err(RunError::io("cannot read", &file))?;
+    Ok(serde_json::from_str(&text)?)
 }
 
 pub fn delete_history(data_dir: &Path) {

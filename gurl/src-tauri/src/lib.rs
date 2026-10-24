@@ -9,12 +9,14 @@ use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_opener::OpenerExt;
 
 mod emit;
+mod error;
 mod hurl;
 mod model;
 mod parse;
 mod runs;
 mod workspace;
 
+use error::{Error, Result};
 use workspace::{EffectiveVar, EnvVar, Node};
 
 #[derive(Default)]
@@ -25,17 +27,17 @@ struct AppState {
 }
 
 impl AppState {
-    fn root(&self) -> Result<PathBuf, String> {
+    fn root(&self) -> Result<PathBuf> {
         self.root
             .lock()
             .unwrap()
             .clone()
-            .ok_or_else(|| "no workspace is open".to_string())
+            .ok_or(Error::NoWorkspace)
     }
 }
 
-fn data_dir(app: &AppHandle) -> Result<PathBuf, String> {
-    app.path().app_data_dir().map_err(|e| e.to_string())
+fn data_dir(app: &AppHandle) -> Result<PathBuf> {
+    Ok(app.path().app_data_dir()?)
 }
 
 // ------------------------------------------------------------------- hurl
@@ -90,10 +92,10 @@ fn open_workspace(
     app: AppHandle,
     state: State<'_, AppState>,
     path: String,
-) -> Result<WorkspaceInfo, String> {
-    let root = std::fs::canonicalize(&path).map_err(|e| format!("cannot open {path}: {e}"))?;
+) -> Result<WorkspaceInfo> {
+    let root = std::fs::canonicalize(&path).map_err(Error::io("cannot open", Path::new(&path)))?;
     if !root.is_dir() {
-        return Err(format!("{path} is not a directory"));
+        return Err(Error::NotADirectory(root));
     }
     let nodes = workspace::list_dir(&root, &root)?;
     *state.root.lock().unwrap() = Some(root.clone());
@@ -112,8 +114,8 @@ fn close_workspace(state: State<'_, AppState>) {
 }
 
 #[command]
-fn list_dir(state: State<'_, AppState>, path: String) -> Result<Vec<Node>, String> {
-    workspace::list_dir(&state.root()?, Path::new(&path))
+fn list_dir(state: State<'_, AppState>, path: String) -> Result<Vec<Node>> {
+    Ok(workspace::list_dir(&state.root()?, Path::new(&path))?)
 }
 
 #[command]
@@ -122,7 +124,7 @@ fn create_file(
     dir: String,
     name: String,
     content: Option<String>,
-) -> Result<String, String> {
+) -> Result<String> {
     let p = workspace::create_file(
         &state.root()?,
         Path::new(&dir),
@@ -133,59 +135,59 @@ fn create_file(
 }
 
 #[command]
-fn create_dir(state: State<'_, AppState>, parent: String, name: String) -> Result<String, String> {
+fn create_dir(state: State<'_, AppState>, parent: String, name: String) -> Result<String> {
     let p = workspace::create_dir(&state.root()?, Path::new(&parent), &name)?;
     Ok(p.to_string_lossy().to_string())
 }
 
 #[command]
-fn rename_path(state: State<'_, AppState>, path: String, new_name: String) -> Result<String, String> {
+fn rename_path(state: State<'_, AppState>, path: String, new_name: String) -> Result<String> {
     let p = workspace::rename(&state.root()?, Path::new(&path), &new_name)?;
     Ok(p.to_string_lossy().to_string())
 }
 
 #[command]
-fn delete_path(state: State<'_, AppState>, path: String) -> Result<(), String> {
-    workspace::delete(&state.root()?, Path::new(&path))
+fn delete_path(state: State<'_, AppState>, path: String) -> Result<()> {
+    Ok(workspace::delete(&state.root()?, Path::new(&path))?)
 }
 
 #[command]
-fn duplicate_path(state: State<'_, AppState>, path: String) -> Result<String, String> {
+fn duplicate_path(state: State<'_, AppState>, path: String) -> Result<String> {
     let p = workspace::duplicate(&state.root()?, Path::new(&path))?;
     Ok(p.to_string_lossy().to_string())
 }
 
 #[command]
-fn get_dir_vars(state: State<'_, AppState>, dir: String) -> Result<Vec<EnvVar>, String> {
+fn get_dir_vars(state: State<'_, AppState>, dir: String) -> Result<Vec<EnvVar>> {
     let root = state.root()?;
     let dir = workspace::contain(&root, Path::new(&dir))?;
     Ok(workspace::read_env(&dir))
 }
 
 #[command]
-fn set_dir_vars(state: State<'_, AppState>, dir: String, vars: Vec<EnvVar>) -> Result<(), String> {
-    workspace::write_env(&state.root()?, Path::new(&dir), &vars)
+fn set_dir_vars(state: State<'_, AppState>, dir: String, vars: Vec<EnvVar>) -> Result<()> {
+    Ok(workspace::write_env(&state.root()?, Path::new(&dir), &vars)?)
 }
 
 #[command]
-fn get_env_text(state: State<'_, AppState>, dir: String) -> Result<String, String> {
-    workspace::read_env_text(&state.root()?, Path::new(&dir))
+fn get_env_text(state: State<'_, AppState>, dir: String) -> Result<String> {
+    Ok(workspace::read_env_text(&state.root()?, Path::new(&dir))?)
 }
 
 #[command]
-fn set_env_text(state: State<'_, AppState>, dir: String, text: String) -> Result<(), String> {
-    workspace::write_env_text(&state.root()?, Path::new(&dir), &text)
+fn set_env_text(state: State<'_, AppState>, dir: String, text: String) -> Result<()> {
+    Ok(workspace::write_env_text(&state.root()?, Path::new(&dir), &text)?)
 }
 
 #[command]
-fn get_effective_vars(state: State<'_, AppState>, dir: String) -> Result<Vec<EffectiveVar>, String> {
-    workspace::effective_vars(&state.root()?, Path::new(&dir))
+fn get_effective_vars(state: State<'_, AppState>, dir: String) -> Result<Vec<EffectiveVar>> {
+    Ok(workspace::effective_vars(&state.root()?, Path::new(&dir))?)
 }
 
 // Plain file access. Files inside the workspace are contained to it; files opened via the
 // "open file" dialog live outside and are allowed only for `.hurl` extensions.
 
-fn check_file_access(state: &AppState, path: &Path) -> Result<(), String> {
+fn check_file_access(state: &AppState, path: &Path) -> Result<()> {
     if let Some(root) = state.root.lock().unwrap().as_ref() {
         if workspace::contain(root, path).is_ok() {
             return Ok(());
@@ -193,24 +195,24 @@ fn check_file_access(state: &AppState, path: &Path) -> Result<(), String> {
     }
     match path.extension().and_then(|e| e.to_str()) {
         Some("hurl") | Some("hur") => Ok(()),
-        _ => Err("only .hurl files can be accessed outside the workspace".into()),
+        _ => Err(Error::OutsideAccess),
     }
 }
 
 #[command]
-fn read_text_file(state: State<'_, AppState>, path: String) -> Result<String, String> {
+fn read_text_file(state: State<'_, AppState>, path: String) -> Result<String> {
     check_file_access(&state, Path::new(&path))?;
-    std::fs::read_to_string(&path).map_err(|e| format!("failed to read {path}: {e}"))
+    std::fs::read_to_string(&path).map_err(Error::io("failed to read", Path::new(&path)))
 }
 
 #[command]
-fn write_text_file(state: State<'_, AppState>, path: String, content: String) -> Result<(), String> {
+fn write_text_file(state: State<'_, AppState>, path: String, content: String) -> Result<()> {
     check_file_access(&state, Path::new(&path))?;
-    std::fs::write(&path, content).map_err(|e| format!("failed to write {path}: {e}"))
+    std::fs::write(&path, content).map_err(Error::io("failed to write", Path::new(&path)))
 }
 
 #[command]
-async fn open_file_dialog(app: AppHandle) -> Result<Option<String>, String> {
+async fn open_file_dialog(app: AppHandle) -> Result<Option<String>> {
     let picked = app
         .dialog()
         .file()
@@ -220,14 +222,14 @@ async fn open_file_dialog(app: AppHandle) -> Result<Option<String>, String> {
 }
 
 #[command]
-async fn open_folder_dialog(app: AppHandle) -> Result<Option<String>, String> {
+async fn open_folder_dialog(app: AppHandle) -> Result<Option<String>> {
     Ok(app.dialog().file().blocking_pick_folder().map(|p| p.to_string()))
 }
 
 /// Lets the user choose a data file for a multipart part / body. The file must live in the
 /// scenario's directory (or below); the returned path is relative to the `.hurl` file.
 #[command]
-async fn pick_data_file(app: AppHandle, hurl_path: String) -> Result<Option<String>, String> {
+async fn pick_data_file(app: AppHandle, hurl_path: String) -> Result<Option<String>> {
     let hurl = PathBuf::from(&hurl_path);
     let dir = hurl.parent().map(Path::to_path_buf);
     let mut dialog = app.dialog().file();
@@ -237,8 +239,8 @@ async fn pick_data_file(app: AppHandle, hurl_path: String) -> Result<Option<Stri
     let Some(picked) = dialog.blocking_pick_file() else {
         return Ok(None);
     };
-    let picked = picked.into_path().map_err(|e| e.to_string())?;
-    workspace::data_file_relative(&hurl, &picked).map(Some)
+    let picked = picked.into_path().map_err(|e| Error::NotLocalPath(Box::new(e)))?;
+    Ok(Some(workspace::data_file_relative(&hurl, &picked)?))
 }
 
 #[command]
@@ -253,7 +255,7 @@ async fn run_scope(
     app: AppHandle,
     request: runs::ScopeRequest,
     on_event: Channel<runs::RunEvent>,
-) -> Result<runs::RunSummary, String> {
+) -> Result<runs::RunSummary> {
     let handle = app.clone();
     tauri::async_runtime::spawn_blocking(move || {
         let state = handle.state::<AppState>();
@@ -264,8 +266,7 @@ async fn run_scope(
         }
         Ok(summary)
     })
-    .await
-    .map_err(|e| e.to_string())?
+    .await?
 }
 
 #[command]
@@ -280,25 +281,22 @@ fn get_response_body(
     file: usize,
     entry: usize,
     call: usize,
-) -> Result<String, String> {
-    state
-        .runs
-        .response_body(&run_id, file, entry, call)
-        .ok_or_else(|| "run is no longer in memory".to_string())
+) -> Result<String> {
+    Ok(state.runs.response_body(&run_id, file, entry, call)?)
 }
 
 #[command]
-fn list_runs(app: AppHandle) -> Result<Vec<runs::RunSummary>, String> {
+fn list_runs(app: AppHandle) -> Result<Vec<runs::RunSummary>> {
     Ok(runs::list_history(&data_dir(&app)?))
 }
 
 #[command]
-fn load_run(app: AppHandle, run_id: String) -> Result<serde_json::Value, String> {
-    runs::load_history_run(&data_dir(&app)?, &run_id)
+fn load_run(app: AppHandle, run_id: String) -> Result<serde_json::Value> {
+    Ok(runs::load_history_run(&data_dir(&app)?, &run_id)?)
 }
 
 #[command]
-fn clear_runs(app: AppHandle) -> Result<(), String> {
+fn clear_runs(app: AppHandle) -> Result<()> {
     runs::delete_history(&data_dir(&app)?);
     Ok(())
 }
@@ -312,7 +310,7 @@ fn export_report(
     format: String,
     dir: Option<String>,
     open: bool,
-) -> Result<String, String> {
+) -> Result<String> {
     let target = match dir {
         Some(d) => PathBuf::from(d),
         None => data_dir(&app)?.join("exports").join(format!("{run_id}-{format}")),
@@ -321,8 +319,7 @@ fn export_report(
     let file = state.runs.export(&run_id, &format, &target)?;
     if open {
         app.opener()
-            .open_path(file.to_string_lossy().to_string(), None::<&str>)
-            .map_err(|e| e.to_string())?;
+            .open_path(file.to_string_lossy().to_string(), None::<&str>)?;
     }
     Ok(file.to_string_lossy().to_string())
 }
@@ -339,10 +336,11 @@ fn get_settings(app: AppHandle) -> serde_json::Value {
 }
 
 #[command]
-fn set_settings(app: AppHandle, settings: serde_json::Value) -> Result<(), String> {
+fn set_settings(app: AppHandle, settings: serde_json::Value) -> Result<()> {
     let dir = data_dir(&app)?;
-    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    std::fs::write(dir.join("settings.json"), settings.to_string()).map_err(|e| e.to_string())
+    std::fs::create_dir_all(&dir).map_err(Error::io("cannot create", &dir))?;
+    let file = dir.join("settings.json");
+    std::fs::write(&file, settings.to_string()).map_err(Error::io("cannot write", &file))
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

@@ -25,6 +25,7 @@ serde_json = "1"
 tauri-plugin-dialog = "2.7.3"
 hurl = { path = "../vendor/hurl/packages/hurl" }
 hurl_core = { path = "../vendor/hurl/packages/hurl_core" }
+thiserror = "2"
 notify = "8"
 notify-debouncer-mini = "0.6"
 

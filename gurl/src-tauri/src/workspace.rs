@@ -5,6 +5,10 @@
 use serde::{Deserialize, Serialize};
 use std::path::{Component, Path, PathBuf};
 
+use crate::error::WorkspaceError;
+
+type Result<T> = std::result::Result<T, WorkspaceError>;
+
 pub const MAX_DEPTH: usize = 255;
 pub const ENV_FILE: &str = "gurl.env";
 
@@ -40,10 +44,10 @@ pub struct EffectiveVar {
 }
 
 /// Number of directory levels `path` sits below `root` (root itself is depth 0).
-pub fn depth_of(root: &Path, path: &Path) -> Result<usize, String> {
+pub fn depth_of(root: &Path, path: &Path) -> Result<usize> {
     let rel = path
         .strip_prefix(root)
-        .map_err(|_| format!("{} is outside the workspace", path.display()))?;
+        .map_err(|_| WorkspaceError::Outside(path.to_path_buf()))?;
     Ok(rel
         .components()
         .filter(|c| matches!(c, Component::Normal(_)))
@@ -52,13 +56,13 @@ pub fn depth_of(root: &Path, path: &Path) -> Result<usize, String> {
 
 /// Resolves `path` (which may not exist yet) and makes sure it lives under `root` without `..`
 /// tricks. Returns the lexically-normalised absolute path.
-pub fn contain(root: &Path, path: &Path) -> Result<PathBuf, String> {
+pub fn contain(root: &Path, path: &Path) -> Result<PathBuf> {
     let mut out = PathBuf::new();
     for c in path.components() {
         match c {
             Component::ParentDir => {
                 if !out.pop() {
-                    return Err("path escapes the workspace".into());
+                    return Err(WorkspaceError::Escapes);
                 }
             }
             Component::CurDir => {}
@@ -66,7 +70,7 @@ pub fn contain(root: &Path, path: &Path) -> Result<PathBuf, String> {
         }
     }
     if !out.starts_with(root) {
-        return Err(format!("{} is outside the workspace", out.display()));
+        return Err(WorkspaceError::Outside(out));
     }
     Ok(out)
 }
@@ -89,13 +93,13 @@ fn sort_nodes(nodes: &mut [Node]) {
 }
 
 /// Lists one directory level (dirs, `.hurl` files and `gurl.env`); dotfiles are hidden.
-pub fn list_dir(root: &Path, dir: &Path) -> Result<Vec<Node>, String> {
+pub fn list_dir(root: &Path, dir: &Path) -> Result<Vec<Node>> {
     let dir = contain(root, dir)?;
     if depth_of(root, &dir)? > MAX_DEPTH {
-        return Err(format!("maximum nesting depth of {MAX_DEPTH} exceeded"));
+        return Err(WorkspaceError::TooDeep);
     }
     let mut nodes = Vec::new();
-    let rd = std::fs::read_dir(&dir).map_err(|e| format!("cannot read {}: {e}", dir.display()))?;
+    let rd = std::fs::read_dir(&dir).map_err(WorkspaceError::io("cannot read", &dir))?;
     for entry in rd.flatten() {
         let name = entry.file_name().to_string_lossy().to_string();
         if name.starts_with('.') {
@@ -171,43 +175,43 @@ pub fn read_env(dir: &Path) -> Vec<EnvVar> {
         .unwrap_or_default()
 }
 
-pub fn write_env(root: &Path, dir: &Path, vars: &[EnvVar]) -> Result<(), String> {
+pub fn write_env(root: &Path, dir: &Path, vars: &[EnvVar]) -> Result<()> {
     let dir = contain(root, dir)?;
     let file = dir.join(ENV_FILE);
     if vars.iter().all(|v| v.name.trim().is_empty()) {
         if file.exists() {
-            std::fs::remove_file(&file).map_err(|e| e.to_string())?;
+            std::fs::remove_file(&file).map_err(WorkspaceError::io("cannot remove", &file))?;
         }
         return Ok(());
     }
-    std::fs::write(&file, emit_env(vars)).map_err(|e| format!("cannot write {}: {e}", file.display()))
+    std::fs::write(&file, emit_env(vars)).map_err(WorkspaceError::io("cannot write", &file))
 }
 
 /// Raw text of a directory's `gurl.env` (empty when there is none).
-pub fn read_env_text(root: &Path, dir: &Path) -> Result<String, String> {
+pub fn read_env_text(root: &Path, dir: &Path) -> Result<String> {
     let dir = contain(root, dir)?;
     Ok(std::fs::read_to_string(dir.join(ENV_FILE)).unwrap_or_default())
 }
 
 /// Writes raw `gurl.env` text; blank text removes the file.
-pub fn write_env_text(root: &Path, dir: &Path, text: &str) -> Result<(), String> {
+pub fn write_env_text(root: &Path, dir: &Path, text: &str) -> Result<()> {
     let dir = contain(root, dir)?;
     let file = dir.join(ENV_FILE);
     if text.trim().is_empty() {
         if file.exists() {
-            std::fs::remove_file(&file).map_err(|e| e.to_string())?;
+            std::fs::remove_file(&file).map_err(WorkspaceError::io("cannot remove", &file))?;
         }
         return Ok(());
     }
-    std::fs::write(&file, text).map_err(|e| format!("cannot write {}: {e}", file.display()))
+    std::fs::write(&file, text).map_err(WorkspaceError::io("cannot write", &file))
 }
 
 /// Directories from `root` down to `dir`, inclusive.
-fn chain(root: &Path, dir: &Path) -> Result<Vec<PathBuf>, String> {
+fn chain(root: &Path, dir: &Path) -> Result<Vec<PathBuf>> {
     let dir = contain(root, dir)?;
     let depth = depth_of(root, &dir)?;
     if depth > MAX_DEPTH {
-        return Err(format!("maximum nesting depth of {MAX_DEPTH} exceeded"));
+        return Err(WorkspaceError::TooDeep);
     }
     let mut dirs: Vec<PathBuf> = dir
         .ancestors()
@@ -219,7 +223,7 @@ fn chain(root: &Path, dir: &Path) -> Result<Vec<PathBuf>, String> {
 }
 
 /// Variables as seen by scenarios in `dir`: root first, each deeper `gurl.env` overriding.
-pub fn effective_vars(root: &Path, dir: &Path) -> Result<Vec<EffectiveVar>, String> {
+pub fn effective_vars(root: &Path, dir: &Path) -> Result<Vec<EffectiveVar>> {
     let mut out: Vec<EffectiveVar> = Vec::new();
     for d in chain(root, dir)? {
         let d_str = d.to_string_lossy().to_string();
@@ -245,74 +249,75 @@ pub fn effective_vars(root: &Path, dir: &Path) -> Result<Vec<EffectiveVar>, Stri
 
 // ----------------------------------------------------------------- file ops
 
-fn valid_name(name: &str) -> Result<(), String> {
+fn valid_name(name: &str) -> Result<()> {
     if name.is_empty()
         || name == "."
         || name == ".."
         || name.contains(['/', '\\'])
         || name.contains('\0')
     {
-        return Err(format!("invalid name: {name:?}"));
+        return Err(WorkspaceError::InvalidName(name.to_string()));
     }
     Ok(())
 }
 
-pub fn create_file(root: &Path, dir: &Path, name: &str, content: &str) -> Result<PathBuf, String> {
+pub fn create_file(root: &Path, dir: &Path, name: &str, content: &str) -> Result<PathBuf> {
     valid_name(name)?;
     let dir = contain(root, dir)?;
     let path = dir.join(name);
     if path.exists() {
-        return Err(format!("{} already exists", path.display()));
+        return Err(WorkspaceError::AlreadyExists(path));
     }
-    std::fs::write(&path, content).map_err(|e| e.to_string())?;
+    std::fs::write(&path, content).map_err(WorkspaceError::io("cannot write", &path))?;
     Ok(path)
 }
 
-pub fn create_dir(root: &Path, parent: &Path, name: &str) -> Result<PathBuf, String> {
+pub fn create_dir(root: &Path, parent: &Path, name: &str) -> Result<PathBuf> {
     valid_name(name)?;
     let parent = contain(root, parent)?;
     let path = parent.join(name);
     if depth_of(root, &path)? > MAX_DEPTH {
-        return Err(format!("maximum nesting depth of {MAX_DEPTH} exceeded"));
+        return Err(WorkspaceError::TooDeep);
     }
     if path.exists() {
-        return Err(format!("{} already exists", path.display()));
+        return Err(WorkspaceError::AlreadyExists(path));
     }
-    std::fs::create_dir(&path).map_err(|e| e.to_string())?;
+    std::fs::create_dir(&path).map_err(WorkspaceError::io("cannot create", &path))?;
     Ok(path)
 }
 
-pub fn rename(root: &Path, from: &Path, new_name: &str) -> Result<PathBuf, String> {
+pub fn rename(root: &Path, from: &Path, new_name: &str) -> Result<PathBuf> {
     valid_name(new_name)?;
     let from = contain(root, from)?;
     if from == root {
-        return Err("cannot rename the workspace root".into());
+        return Err(WorkspaceError::RootProtected("rename"));
     }
     let to = from.with_file_name(new_name);
     if to.exists() {
-        return Err(format!("{} already exists", to.display()));
+        return Err(WorkspaceError::AlreadyExists(to));
     }
-    std::fs::rename(&from, &to).map_err(|e| e.to_string())?;
+    std::fs::rename(&from, &to).map_err(WorkspaceError::io("cannot rename", &from))?;
     Ok(to)
 }
 
-pub fn delete(root: &Path, path: &Path) -> Result<(), String> {
+pub fn delete(root: &Path, path: &Path) -> Result<()> {
     let path = contain(root, path)?;
     if path == root {
-        return Err("cannot delete the workspace root".into());
+        return Err(WorkspaceError::RootProtected("delete"));
     }
-    let meta = std::fs::symlink_metadata(&path).map_err(|e| e.to_string())?;
-    if meta.is_dir() {
-        std::fs::remove_dir_all(&path).map_err(|e| e.to_string())
+    let meta = std::fs::symlink_metadata(&path).map_err(WorkspaceError::io("cannot read", &path))?;
+    let removed = if meta.is_dir() {
+        std::fs::remove_dir_all(&path)
     } else {
-        std::fs::remove_file(&path).map_err(|e| e.to_string())
-    }
+        std::fs::remove_file(&path)
+    };
+    removed.map_err(WorkspaceError::io("cannot delete", &path))
 }
 
-pub fn duplicate(root: &Path, path: &Path) -> Result<PathBuf, String> {
+pub fn duplicate(root: &Path, path: &Path) -> Result<PathBuf> {
     let path = contain(root, path)?;
     if !path.is_file() {
-        return Err("only files can be duplicated".into());
+        return Err(WorkspaceError::NotAFile);
     }
     let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("copy");
     let ext = path.extension().and_then(|s| s.to_str()).unwrap_or("");
@@ -324,7 +329,7 @@ pub fn duplicate(root: &Path, path: &Path) -> Result<PathBuf, String> {
         };
         let to = path.with_file_name(name);
         if !to.exists() {
-            std::fs::copy(&path, &to).map_err(|e| e.to_string())?;
+            std::fs::copy(&path, &to).map_err(WorkspaceError::io("cannot copy", &path))?;
             return Ok(to);
         }
     }
@@ -332,13 +337,13 @@ pub fn duplicate(root: &Path, path: &Path) -> Result<PathBuf, String> {
 }
 
 /// All `.hurl` files below `dir` (recursively when `recursive`), sorted, depth-limited.
-pub fn collect_hurl_files(root: &Path, dir: &Path, recursive: bool) -> Result<Vec<PathBuf>, String> {
-    fn walk(root: &Path, dir: &Path, recursive: bool, out: &mut Vec<PathBuf>) -> Result<(), String> {
+pub fn collect_hurl_files(root: &Path, dir: &Path, recursive: bool) -> Result<Vec<PathBuf>> {
+    fn walk(root: &Path, dir: &Path, recursive: bool, out: &mut Vec<PathBuf>) -> Result<()> {
         if depth_of(root, dir)? > MAX_DEPTH {
             return Ok(());
         }
         let mut entries: Vec<_> = std::fs::read_dir(dir)
-            .map_err(|e| format!("cannot read {}: {e}", dir.display()))?
+            .map_err(WorkspaceError::io("cannot read", dir))?
             .flatten()
             .collect();
         entries.sort_by_key(|e| e.file_name().to_string_lossy().to_lowercase());
@@ -392,16 +397,11 @@ fn normalize(path: &Path) -> PathBuf {
 
 /// Data files referenced from a `.hurl` file must live in that file's directory or below
 /// (HURL's file root). Returns the `/`-separated relative path for `picked`.
-pub fn data_file_relative(hurl_file: &Path, picked: &Path) -> Result<String, String> {
-    let dir = hurl_file.parent().ok_or("scenario has no directory")?;
+pub fn data_file_relative(hurl_file: &Path, picked: &Path) -> Result<String> {
+    let dir = hurl_file.parent().ok_or(WorkspaceError::NoParentDir)?;
     let dir = normalize(dir);
     let picked = normalize(picked);
-    let rel = picked.strip_prefix(&dir).map_err(|_| {
-        format!(
-            "data files must be inside {} (the scenario's directory) or a sub-directory",
-            dir.display()
-        )
-    })?;
+    let rel = picked.strip_prefix(&dir).map_err(|_| WorkspaceError::DataFileOutside(dir.clone()))?;
     Ok(rel
         .components()
         .map(|c| c.as_os_str().to_string_lossy().to_string())
