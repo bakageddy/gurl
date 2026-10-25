@@ -26,6 +26,12 @@ A GUI for [HURL](https://hurl.dev), written in Tauri 2 (Rust) and Svelte 5. HURL
 - **Import** cURL commands (paste "Copy as cURL"), Postman collections (v2.1) and OpenCollection YAML (bundled
   file or Bruno's folder layout) into folders of `.hurl` files plus `gurl.env`; also `gurl import` on the command line.
 
+## Documentation
+
+The user documentation is in [`docs/`](docs/README.md): installation, workspace files (`gurl.env`,
+`gurl.headers`), the builder and the text editor, running and the result view, quick requests, import, reports
+and the command line.
+
 ## Install
 
 Download the latest build for your platform from the Releases page: `.dmg` (macOS, Apple Silicon and Intel),

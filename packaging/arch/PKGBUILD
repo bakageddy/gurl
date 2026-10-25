@@ -2,7 +2,7 @@
 # Build a pacman package of gURL from a tagged source tarball:
 #   cd packaging/arch && makepkg -si
 pkgname=gurl
-pkgver=0.5.0
+pkgver=0.6.0
 pkgrel=1
 pkgdesc='A GUI for HURL: workspaces, a visual request builder and reports'
 arch=('x86_64')
