@@ -1,5 +1,5 @@
 import { save as saveDialog } from "@tauri-apps/plugin-dialog";
-import { addResponseItems, emitHurl, parseHurl, readTextFile, writeTextFile } from "../api";
+import { addResponseItems, emitHurl, parseHurl, readTextFile, setResponseBody, writeTextFile } from "../api";
 import type { AssertItems } from "../assert-target";
 import type { Diagnostic, HurlDoc } from "../types";
 import { basename } from "../format";
@@ -170,11 +170,18 @@ export class DocTab {
   async addResponseItems(entryIndex: number, items: AssertItems) {
     await this.sync();
     const changed = this.run?.sourceText != null && this.run.sourceText !== this.text;
-    const edit = await addResponseItems(this.text, entryIndex, items.asserts ?? [], items.captures ?? []);
-    this.setText(edit.text);
-    this.pendingReveal = edit.firstLine;
-    const what = items.captures?.length ? "capture" : "assert";
-    ui.toast(`Added ${edit.added} ${what}${edit.added === 1 ? "" : "s"} · line ${edit.firstLine}`);
+    if (items.body != null) {
+      const edit = await setResponseBody(this.text, entryIndex, items.body);
+      this.setText(edit.text);
+      this.pendingReveal = edit.firstLine;
+      ui.toast(`Expected body set · line ${edit.firstLine}`);
+    } else {
+      const edit = await addResponseItems(this.text, entryIndex, items.asserts ?? [], items.captures ?? []);
+      this.setText(edit.text);
+      this.pendingReveal = edit.firstLine;
+      const what = items.captures?.length ? "capture" : "assert";
+      ui.toast(`Added ${edit.added} ${what}${edit.added === 1 ? "" : "s"} · line ${edit.firstLine}`);
+    }
     if (changed) ui.toast("The file changed since this run: check that it landed on the right request");
   }
 }

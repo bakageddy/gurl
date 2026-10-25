@@ -141,6 +141,97 @@ pub fn add_response_items(
     })
 }
 
+/// Sets the expected body of entry `entry` (1-based) to `body`, byte for byte, replacing an
+/// existing one. HURL compares the body section with the response text exactly, so the form is
+/// chosen so that it evaluates to `body` unchanged: a bare JSON value when the text is JSON that
+/// HURL re-renders identically (no escapes, no `{{`, no final newline), otherwise a fenced
+/// multiline string whose closing fence follows the text directly when the text has no final
+/// newline. Does nothing else to the file.
+pub fn set_response_body(text: &str, entry: usize, body: &str) -> Result<Edit, EditError> {
+    let file = parse_hurl_file(text).map_err(|e| {
+        use hurl_core::error::{DisplaySourceError, OutputFormat};
+        EditError::Parse(e.render("", text, None, OutputFormat::Plain))
+    })?;
+    let ast_entry = entry
+        .checked_sub(1)
+        .and_then(|i| file.entries.get(i))
+        .ok_or(EditError::EntryOutOfRange(entry))?;
+    if body.is_empty() {
+        return Err(EditError::Empty);
+    }
+
+    let eol = if text.contains("\r\n") { "\r\n" } else { "\n" };
+    let mut lines: Vec<String> = text.split_inclusive('\n').map(str::to_string).collect();
+
+    // The new body, as source lines (each without its newline).
+    let mut block: Vec<String> = Vec::new();
+    let (after_line, remove) = match &ast_entry.response {
+        Some(resp) => match &resp.body {
+            Some(b) => {
+                let start = b.space0.source_info.start.line;
+                let end = line_of(&b.line_terminator0);
+                (start - 1, end - start + 1)
+            }
+            None => (
+                resp.sections
+                    .iter()
+                    .map(section_end_line)
+                    .max()
+                    .or_else(|| resp.headers.last().map(|h| line_of(&h.line_terminator0)))
+                    .unwrap_or_else(|| response_status_line(resp)),
+                0,
+            ),
+        },
+        None => {
+            block.push("HTTP *".to_string());
+            (request_end_line(ast_entry), 0)
+        }
+    };
+    let first_line = after_line + 1 + block.len();
+    block.extend(body_source_lines(body));
+
+    if after_line > 0 && remove == 0 {
+        let prev = &mut lines[after_line - 1];
+        if !prev.ends_with('\n') {
+            prev.push_str(eol);
+        }
+    }
+    let rendered: Vec<String> = block.iter().map(|l| format!("{l}{eol}")).collect();
+    let end = (after_line + remove).min(lines.len());
+    lines.splice(after_line..end, rendered);
+    Ok(Edit {
+        text: lines.concat(),
+        first_line,
+        added: 1,
+    })
+}
+
+/// The source lines of a body section that HURL evaluates to exactly `body`.
+fn body_source_lines(body: &str) -> Vec<String> {
+    let is_json = serde_json::from_str::<serde_json::Value>(body).is_ok();
+    let bare_ok = is_json
+        && !body.ends_with('\n')
+        && !body.contains('\\')
+        && !body.contains("{{")
+        && !body.contains('\r');
+    if bare_ok {
+        return body.lines().map(str::to_string).collect();
+    }
+    let lang = if is_json { "json" } else { "" };
+    let mut out = vec![format!("```{lang}")];
+    let mut text_lines: Vec<String> = body.split_inclusive('\n').map(str::to_string).collect();
+    if body.ends_with('\n') {
+        out.extend(text_lines.iter().map(|l| l.trim_end_matches(['\r', '\n']).to_string()));
+        out.push("```".to_string());
+    } else {
+        // No final newline in the response: the closing fence must follow the last line directly.
+        let last = text_lines.pop().unwrap_or_default();
+        out.extend(text_lines.iter().map(|l| l.trim_end_matches(['\r', '\n']).to_string()));
+        out.push(format!("{last}```"));
+    }
+    out
+}
+
 /// For an entry without a response both sections may be created; `HTTP *` goes with whichever is
 /// inserted first in the file (Captures precede Asserts) — but since insertion happens bottom-up,
 /// we attach it to the section that will end up on top.
@@ -319,6 +410,34 @@ mod tests {
         assert_eq!(
             e.text,
             "GET http://x\r\nHTTP 200\r\n[Asserts]\r\nstatus == 200\r\n"
+        );
+    }
+
+    #[test]
+    fn set_body_replaces_or_creates_the_body_section() {
+        // Existing fenced body replaced by bare JSON (exact bytes, no final newline).
+        let text = "GET http://x\nHTTP 200\n[Asserts]\nstatus == 200\n```json\n{\"a\": 1}\n```\n\nGET http://y\n";
+        let e = set_response_body(text, 1, "{\n  \"a\": 1\n}").unwrap();
+        assert_eq!(
+            e.text,
+            "GET http://x\nHTTP 200\n[Asserts]\nstatus == 200\n{\n  \"a\": 1\n}\n\nGET http://y\n"
+        );
+        assert_eq!(e.first_line, 5);
+
+        // No body yet: inserted after the sections. Text with a final newline gets a fence.
+        let e = set_response_body("GET http://x\nHTTP 200\n[Asserts]\nstatus == 200\n", 1, "hello\n").unwrap();
+        assert_eq!(e.text, "GET http://x\nHTTP 200\n[Asserts]\nstatus == 200\n```\nhello\n```\n");
+
+        // No response at all, text without final newline and a JSON escape: glued fence.
+        let e = set_response_body("GET http://x\n", 1, "{\"a\":\"\\u00e9\"}").unwrap();
+        assert_eq!(e.text, "GET http://x\nHTTP *\n```json\n{\"a\":\"\\u00e9\"}```\n");
+        assert_eq!(e.first_line, 3);
+        assert_eq!(parse_hurl_file(&e.text).unwrap().entries.len(), 1);
+
+        assert_eq!(set_response_body("GET http://x\n", 1, ""), Err(EditError::Empty));
+        assert_eq!(
+            set_response_body("GET http://x\n", 2, "x"),
+            Err(EditError::EntryOutOfRange(2))
         );
     }
 

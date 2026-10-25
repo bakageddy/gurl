@@ -362,6 +362,12 @@ fn add_response_items(
     Ok(edit::add_response_items(&text, entry, &asserts, &captures)?)
 }
 
+/// Sets the expected body of entry `entry` (1-based) of `text` to `body`, byte for byte.
+#[command]
+fn set_response_body(text: String, entry: usize, body: String) -> Result<edit::Edit> {
+    Ok(edit::set_response_body(&text, entry, &body)?)
+}
+
 /// Converts a cURL / Postman / OpenCollection source into HURL files without writing anything.
 #[command]
 fn import_preview(
@@ -497,6 +503,7 @@ pub fn run() {
             query_body,
             query_text,
             add_response_items,
+            set_response_body,
             import_preview,
             import_apply,
             list_runs,

@@ -138,6 +138,16 @@
     }
   }
 
+  /** Writes the exact response text as the expected body (the only body check HURL has). */
+  async function expectBody() {
+    if (res.bodyTruncated && full === null) await loadFull();
+    await add({ body: full ?? res.body ?? "" });
+  }
+
+  /** The body section, `body ==` and the like: HURL compares those with the response text exactly. */
+  const isBodyAssert = (a: { source?: string }) =>
+    /^(```|\{|\[[^A-Z]|<|body\b|base64,|hex,|file,)/.test(a.source ?? "");
+
   /** The context menu for anything assertable: suggestions, capture, copy. */
   function openMenu(e: MouseEvent, suggestions: Suggestion[], extra: { captureQuery?: QueryM; copy?: Array<[string, string]> } = {}) {
     const items: MenuItem[] = [];
@@ -251,6 +261,14 @@
           <button class="btn sm ghost" class:active={showQuery} onclick={() => (showQuery = !showQuery)} title="Try a {queryKinds[0]} query and turn it into an assert"><Icon name="braces" size={12} /> Query</button>
         {/if}
         <span class="spacer"></span>
+        {#if bodyText && family !== "image"}
+          <button
+            class="btn sm ghost"
+            disabled={!canAdd}
+            onclick={expectBody}
+            title={canAdd ? "Set the expected body of this request to this response, byte for byte" : (target?.reason?.() ?? "Can't edit here")}
+          ><Icon name="check" size={12} /> Expect this body</button>
+        {/if}
         <button class="btn sm ghost" onclick={() => copy(pretty ?? bodyText)}><Icon name="copy" size={12} /> Copy</button>
         {#if res.bodyTruncated && full === null}
           <span class="warn-text">Showing the first {bytes(res.body?.length ?? 0)} of {bytes(res.bodySize ?? 0)}.</span>
@@ -321,6 +339,13 @@
               <div class="a-main">
                 <code class="cond mono">{a.source ?? `line ${a.line}`}</code>
                 {#if a.message}<pre class="mono msg">{a.message}</pre>{/if}
+                {#if !a.success && isBodyAssert(a)}
+                  <p class="hint subtle">
+                    HURL compares the expected body with the response text byte for byte, including whitespace and the final newline.
+                    For structural checks use <code class="mono">jsonpath</code> asserts from the body tab{#if canAdd}, or
+                    <button class="link" onclick={expectBody}>expect this response</button> exactly{/if}.
+                  </p>
+                {/if}
               </div>
               <span class="ln subtle">line {a.line}</span>
             </li>
@@ -555,6 +580,20 @@
     margin: 4px 0 0;
     white-space: pre-wrap;
     color: var(--fg-muted);
+  }
+  .hint {
+    margin: 6px 0 0;
+    font-size: 12px;
+    line-height: 1.5;
+  }
+  .hint .link {
+    background: none;
+    border: 0;
+    padding: 0;
+    font: inherit;
+    color: var(--accent);
+    text-decoration: underline;
+    cursor: pointer;
   }
   .wrap {
     white-space: pre-wrap;

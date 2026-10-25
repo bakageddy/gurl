@@ -8,6 +8,8 @@ export const ASSERT_TARGET = Symbol("assert-target");
 export interface AssertItems {
   asserts?: AssertM[];
   captures?: CaptureM[];
+  /** Replaces the expected body with this exact text (HURL compares bodies byte for byte). */
+  body?: string;
 }
 
 export interface AssertTarget {

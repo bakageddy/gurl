@@ -120,7 +120,8 @@ CI runs the same checks on Ubuntu 22.04/24.04, macOS and Windows (`.github/workf
 Run `crates/gurl-core/fixtures/all.hurl` (or any scenario) and, from the result: switch Body between Pretty / Raw /
 Tree, filter the tree, open Query and type a `jsonpath` (or `xpath` on XML/HTML), then add asserts from a JSON node,
 a header, a cookie, the status and the duration, once in the builder view and once in the text view. The lines must
-land in the right entry, comments elsewhere must survive, and re-running must pass.
+land in the right entry, comments elsewhere must survive, and re-running must pass. Also click "Expect this body" on
+a JSON response: the body section it writes must pass on re-run (HURL compares bodies byte for byte).
 
 ## Style
 

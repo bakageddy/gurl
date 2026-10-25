@@ -518,6 +518,9 @@ fn inject_response_bodies(json: &mut serde_json::Value, result: &hurl::runner::H
 
 /// HURL's report only has the line number of each assert. Add the text of that line so the UI
 /// can show the condition itself (`jsonpath "$.id" == 1`, `HTTP 200`, ...).
+///
+/// `HTTP 200` is two implicit asserts for HURL (version, then status) on one line; they are
+/// merged into one row so the UI doesn't show the line twice.
 fn inject_assert_sources(json: &mut serde_json::Value, content: &str) {
     let lines: Vec<&str> = content.lines().collect();
     let Some(entries) = json.get_mut("entries").and_then(|e| e.as_array_mut()) else {
@@ -527,11 +530,55 @@ fn inject_assert_sources(json: &mut serde_json::Value, content: &str) {
         let Some(asserts) = entry.get_mut("asserts").and_then(|a| a.as_array_mut()) else {
             continue;
         };
-        for a in asserts {
+        let mut merged: Vec<serde_json::Value> = Vec::new();
+        for a in asserts.drain(..) {
+            let line = a.get("line").and_then(|l| l.as_u64()).unwrap_or(0);
+            if let Some(prev) = merged
+                .last_mut()
+                .filter(|p| p.get("line").and_then(|l| l.as_u64()) == Some(line))
+            {
+                let ok = prev["success"].as_bool().unwrap_or(false)
+                    && a["success"].as_bool().unwrap_or(false);
+                prev["success"] = serde_json::Value::Bool(ok);
+                if let Some(msg) = a.get("message").and_then(|m| m.as_str()) {
+                    let joined = match prev.get("message").and_then(|m| m.as_str()) {
+                        Some(p) if !p.is_empty() => format!("{p}\n{msg}"),
+                        _ => msg.to_string(),
+                    };
+                    prev["message"] = serde_json::Value::String(joined);
+                }
+                continue;
+            }
+            merged.push(a);
+        }
+        for a in merged.iter_mut() {
             let line = a.get("line").and_then(|l| l.as_u64()).unwrap_or(0) as usize;
             if let Some(text) = line.checked_sub(1).and_then(|i| lines.get(i)) {
                 a["source"] = serde_json::Value::String(text.trim().to_string());
             }
         }
+        *asserts = merged;
+    }
+}
+
+#[cfg(test)]
+mod report_tests {
+    use super::inject_assert_sources;
+    use serde_json::json;
+
+    #[test]
+    fn same_line_asserts_are_merged() {
+        let mut report = json!({"entries": [{"asserts": [
+            {"line": 2, "success": true},
+            {"line": 2, "success": false, "message": "status"},
+            {"line": 4, "success": true}
+        ]}]});
+        inject_assert_sources(&mut report, "GET http://x\nHTTP 200\n[Asserts]\nstatus == 200\n");
+        let asserts = report["entries"][0]["asserts"].as_array().unwrap();
+        assert_eq!(asserts.len(), 2);
+        assert_eq!(asserts[0]["source"], "HTTP 200");
+        assert_eq!(asserts[0]["success"], false);
+        assert_eq!(asserts[0]["message"], "status");
+        assert_eq!(asserts[1]["source"], "status == 200");
     }
 }

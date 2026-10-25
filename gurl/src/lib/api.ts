@@ -117,6 +117,8 @@ export interface TextEdit {
 }
 export const addResponseItems = (text: string, entry: number, asserts: AssertM[], captures: CaptureM[]) =>
   invoke<TextEdit>("add_response_items", { text, entry, asserts, captures });
+export const setResponseBody = (text: string, entry: number, body: string) =>
+  invoke<TextEdit>("set_response_body", { text, entry, body });
 export const listRuns = () => invoke<RunSummary[]>("list_runs");
 export const loadRun = (runId: string) => invoke<FileRun[]>("load_run", { runId });
 export const clearRuns = () => invoke<void>("clear_runs");
