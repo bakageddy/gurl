@@ -1734,6 +1734,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_yaml",
+ "similar",
  "terminal_size",
  "thiserror 2.0.21",
 ]

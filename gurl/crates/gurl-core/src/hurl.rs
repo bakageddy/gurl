@@ -1,6 +1,9 @@
 use crate::error::{RunError, chain_message};
 use hurl::http::{CredentialForwarding, FollowLocation, IpResolve, RequestedHttpVersion};
-use hurl::runner::{Output, RunnerOptions, RunnerOptionsBuilder, Value, VariableSet};
+use hurl::runner::{
+    AssertResult, Output, RunnerError, RunnerErrorKind, RunnerOptions, RunnerOptionsBuilder,
+    Value, VariableSet,
+};
 use hurl::util::logger::{LoggerOptions, LoggerOptionsBuilder, Verbosity};
 use hurl::util::path::ContextDir;
 use hurl_core::input::Input;
@@ -295,7 +298,10 @@ pub fn run(
     let errors: Vec<String> = result
         .errors()
         .iter()
-        .map(|(err, src)| format!("{}:{}: {:?}", input, src.start.line, err.kind))
+        .map(|(err, src)| {
+            use hurl_core::error::{DisplaySourceError, OutputFormat};
+            err.render(&input.to_string(), &content, Some(*src), OutputFormat::Plain)
+        })
         .collect();
 
     let mut report = match result.to_json(&content, &input, None, &[]) {
@@ -303,6 +309,7 @@ pub fn run(
         Err(e) => return fail(format!("failed to serialize report: {e}")),
     };
     inject_response_bodies(&mut report, &result);
+    inject_assert_details(&mut report, &result);
     inject_assert_sources(&mut report, &content);
 
     let file_run = FileRun {
@@ -516,6 +523,211 @@ fn inject_response_bodies(json: &mut serde_json::Value, result: &hurl::runner::H
     }
 }
 
+/// Lines of a body diff are capped so a huge mismatching body doesn't flood the UI.
+const DIFF_LINE_LIMIT: usize = 2000;
+
+/// Adds structured details to each assert of the report so the UI can render the failure instead
+/// of printing HURL's terminal message: `kind`, `actual`, `expected`, and for body asserts a
+/// line `diff` (`[{op: "eq"|"del"|"ins", text}]`, expected → actual). HURL's report lists asserts
+/// in the same order as `result.entries[].asserts`.
+fn inject_assert_details(json: &mut serde_json::Value, result: &hurl::runner::HurlResult) {
+    let Some(entries_json) = json.get_mut("entries").and_then(|e| e.as_array_mut()) else {
+        return;
+    };
+    for (entry_json, entry) in entries_json.iter_mut().zip(&result.entries) {
+        let Some(asserts_json) = entry_json.get_mut("asserts").and_then(|a| a.as_array_mut())
+        else {
+            continue;
+        };
+        for (a_json, a) in asserts_json.iter_mut().zip(&entry.asserts) {
+            if a_json.get("line").and_then(|l| l.as_u64()) != Some(a.line() as u64) {
+                continue;
+            }
+            let d = assert_details(a);
+            a_json["kind"] = serde_json::Value::String(d.kind.to_string());
+            if let Some(actual) = d.actual {
+                a_json["actual"] = serde_json::Value::String(actual);
+            }
+            if let Some(expected) = d.expected {
+                a_json["expected"] = serde_json::Value::String(expected);
+            }
+            if let Some(reason) = d.reason {
+                a_json["reason"] = serde_json::Value::String(reason);
+            }
+            if let Some(diff) = d.diff {
+                a_json["diff"] = serde_json::Value::Array(diff);
+            }
+        }
+    }
+}
+
+#[derive(Default)]
+struct AssertDetails {
+    kind: &'static str,
+    actual: Option<String>,
+    expected: Option<String>,
+    /// Why the assert couldn't be evaluated (query error, type mismatch, ...).
+    reason: Option<String>,
+    diff: Option<Vec<serde_json::Value>>,
+}
+
+fn error_reason(err: &RunnerError) -> String {
+    use hurl_core::error::DisplaySourceError;
+    match &err.kind {
+        RunnerErrorKind::QueryInvalidJson => "the body is not valid JSON".to_string(),
+        RunnerErrorKind::QueryInvalidXml => "the body is not valid XML".to_string(),
+        RunnerErrorKind::InvalidXPathEval => "invalid XPath expression".to_string(),
+        RunnerErrorKind::QueryHeaderNotFound => "header not found".to_string(),
+        RunnerErrorKind::NoQueryResult => "the query returned nothing".to_string(),
+        RunnerErrorKind::FilterInvalidInputType { actual, expected } => {
+            format!("filter expects {expected}, got {actual}")
+        }
+        RunnerErrorKind::FilterInvalidInputValue(s) => format!("invalid filter input: {s}"),
+        RunnerErrorKind::FilterMissingInput => "filter input is missing".to_string(),
+        RunnerErrorKind::TemplateVariableNotDefined { name } => {
+            format!("variable {name} is not defined")
+        }
+        RunnerErrorKind::ExpressionInvalidType { value, expecting } => {
+            format!("expecting {expecting}, got {value}")
+        }
+        _ => err.description(),
+    }
+}
+
+fn assert_details(a: &AssertResult) -> AssertDetails {
+    match a {
+        AssertResult::ImplicitVersion {
+            actual, expected, ..
+        } => AssertDetails {
+            kind: "version",
+            actual: Some(actual.clone()),
+            expected: Some(expected.clone()),
+            ..Default::default()
+        },
+        AssertResult::ImplicitStatus {
+            actual, expected, ..
+        } => AssertDetails {
+            kind: "status",
+            actual: Some(actual.to_string()),
+            expected: Some(expected.to_string()),
+            ..Default::default()
+        },
+        AssertResult::ImplicitHeader {
+            actual, expected, ..
+        } => AssertDetails {
+            kind: "header",
+            actual: actual.as_ref().ok().cloned(),
+            expected: Some(expected.clone()),
+            reason: actual.as_ref().err().map(error_reason),
+            ..Default::default()
+        },
+        AssertResult::ImplicitBody {
+            actual, expected, ..
+        } => {
+            let actual_s = actual.as_ref().ok().map(body_value_text);
+            let expected_s = expected.as_ref().ok().map(body_value_text);
+            let failed = actual_s != expected_s || actual.is_err() || expected.is_err();
+            let diff = match (&expected_s, &actual_s) {
+                (Some(e), Some(a)) if failed => Some(line_diff(e, a)),
+                _ => None,
+            };
+            AssertDetails {
+                kind: "body",
+                actual: actual_s,
+                expected: expected_s,
+                reason: actual
+                    .as_ref()
+                    .err()
+                    .or(expected.as_ref().err())
+                    .map(error_reason),
+                diff,
+            }
+        }
+        AssertResult::Explicit {
+            actual,
+            predicate_result,
+            ..
+        } => {
+            let mut d = AssertDetails {
+                kind: "explicit",
+                ..Default::default()
+            };
+            match actual {
+                Ok(Some(v)) => d.actual = Some(value_text(v)),
+                Ok(None) => d.actual = Some("none".to_string()),
+                Err(e) => d.reason = Some(error_reason(e)),
+            }
+            if let Some(Err(e)) = predicate_result {
+                match &e.kind {
+                    RunnerErrorKind::AssertFailure {
+                        actual,
+                        expected,
+                        type_mismatch,
+                    } => {
+                        d.actual = Some(actual.clone());
+                        d.expected = Some(expected.clone());
+                        if *type_mismatch {
+                            d.reason = Some(
+                                "actual and expected values have different types".to_string(),
+                            );
+                        }
+                    }
+                    _ => d.reason = Some(error_reason(e)),
+                }
+            }
+            d
+        }
+    }
+}
+
+/// A value as HURL prints it in `actual: ...` lines (strings quoted, numbers raw).
+fn value_text(v: &Value) -> String {
+    match v {
+        Value::String(s) => format!("string <{s}>"),
+        Value::Bytes(b) => format!("bytes <{}>", hex_string(b)),
+        other => format!("{} <{other}>", other.kind()),
+    }
+}
+
+fn hex_string(bytes: &[u8]) -> String {
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
+}
+
+/// A body (text or bytes) as text for the diff.
+fn body_value_text(v: &Value) -> String {
+    match v {
+        Value::String(s) => s.clone(),
+        Value::Bytes(b) => String::from_utf8_lossy(b).to_string(),
+        other => other.to_string(),
+    }
+}
+
+/// Line diff from `expected` to `actual`: `-` lines are expected-only, `+` lines actual-only.
+fn line_diff(expected: &str, actual: &str) -> Vec<serde_json::Value> {
+    use similar::{ChangeTag, TextDiff};
+    let diff = TextDiff::from_lines(expected, actual);
+    let mut out = Vec::new();
+    for change in diff.iter_all_changes() {
+        if out.len() >= DIFF_LINE_LIMIT {
+            out.push(serde_json::json!({"op": "cut", "text": ""}));
+            break;
+        }
+        let op = match change.tag() {
+            ChangeTag::Equal => "eq",
+            ChangeTag::Delete => "del",
+            ChangeTag::Insert => "ins",
+        };
+        let text = change.value().trim_end_matches(['\r', '\n']);
+        let missing_newline = change.missing_newline();
+        let mut row = serde_json::json!({"op": op, "text": text});
+        if missing_newline {
+            row["noEol"] = serde_json::Value::Bool(true);
+        }
+        out.push(row);
+    }
+    out
+}
+
 /// HURL's report only has the line number of each assert. Add the text of that line so the UI
 /// can show the condition itself (`jsonpath "$.id" == 1`, `HTTP 200`, ...).
 ///
@@ -537,9 +749,20 @@ fn inject_assert_sources(json: &mut serde_json::Value, content: &str) {
                 .last_mut()
                 .filter(|p| p.get("line").and_then(|l| l.as_u64()) == Some(line))
             {
-                let ok = prev["success"].as_bool().unwrap_or(false)
-                    && a["success"].as_bool().unwrap_or(false);
-                prev["success"] = serde_json::Value::Bool(ok);
+                let prev_ok = prev["success"].as_bool().unwrap_or(false);
+                let a_ok = a["success"].as_bool().unwrap_or(false);
+                prev["success"] = serde_json::Value::Bool(prev_ok && a_ok);
+                // The failing half (status, when the version passed) provides the details.
+                if prev_ok && !a_ok {
+                    for key in ["kind", "actual", "expected", "reason", "diff"] {
+                        match a.get(key) {
+                            Some(v) => prev[key] = v.clone(),
+                            None => {
+                                prev.as_object_mut().map(|o| o.remove(key));
+                            }
+                        }
+                    }
+                }
                 if let Some(msg) = a.get("message").and_then(|m| m.as_str()) {
                     let joined = match prev.get("message").and_then(|m| m.as_str()) {
                         Some(p) if !p.is_empty() => format!("{p}\n{msg}"),
@@ -563,8 +786,49 @@ fn inject_assert_sources(json: &mut serde_json::Value, content: &str) {
 
 #[cfg(test)]
 mod report_tests {
-    use super::inject_assert_sources;
+    use super::{assert_details, inject_assert_sources, line_diff};
+    use hurl::runner::{AssertResult, RunnerError, RunnerErrorKind, Value};
+    use hurl_core::reader::Pos;
+    use hurl_core::ast::SourceInfo;
     use serde_json::json;
+
+    #[test]
+    fn body_diff_and_explicit_failure_details() {
+        let si = SourceInfo::new(Pos::new(3, 1), Pos::new(3, 1));
+        let d = assert_details(&AssertResult::ImplicitBody {
+            actual: Ok(Value::String("{\n  \"a\": 1\n}".into())),
+            expected: Ok(Value::String("{\n  \"a\": 1\n}\n".into())),
+            source_info: si,
+        });
+        assert_eq!(d.kind, "body");
+        let diff = d.diff.unwrap();
+        // Same lines, the last one differing only by its final newline.
+        assert_eq!(diff[0]["op"], "eq");
+        assert_eq!(diff.iter().filter(|r| r["op"] == "del").count(), 1);
+        assert_eq!(diff.iter().filter(|r| r["op"] == "ins").count(), 1);
+        assert_eq!(diff.iter().find(|r| r["op"] == "ins").unwrap()["noEol"], true);
+
+        let e = RunnerError::new(
+            si,
+            RunnerErrorKind::AssertFailure {
+                actual: "int <2>".into(),
+                expected: "int <1>".into(),
+                type_mismatch: false,
+            },
+            true,
+        );
+        let d = assert_details(&AssertResult::Explicit {
+            actual: Ok(Some(Value::Number(hurl::runner::Number::Integer(2)))),
+            source_info: si,
+            predicate_result: Some(Err(e)),
+        });
+        assert_eq!(d.kind, "explicit");
+        assert_eq!(d.actual.as_deref(), Some("int <2>"));
+        assert_eq!(d.expected.as_deref(), Some("int <1>"));
+        assert!(d.reason.is_none());
+
+        assert_eq!(line_diff("a\nb\n", "a\nc\n").len(), 3);
+    }
 
     #[test]
     fn same_line_asserts_are_merged() {

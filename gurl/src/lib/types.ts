@@ -198,10 +198,31 @@ export interface HurlCall {
     start_transfer: number;
   };
 }
+export interface DiffRow {
+  op: "eq" | "del" | "ins" | "cut";
+  text: string;
+  /** The line had no final newline (so it differs from an otherwise equal line that has one). */
+  noEol?: boolean;
+}
+export interface HurlAssertReport {
+  success: boolean;
+  line: number;
+  /** HURL's terminal rendering of the failure; the structured fields below are preferred. */
+  message?: string;
+  /** Text of the source line, added by gURL. */
+  source?: string;
+  kind?: "version" | "status" | "header" | "body" | "explicit";
+  actual?: string;
+  expected?: string;
+  /** Why the assert couldn't be evaluated (query error, type mismatch, ...). */
+  reason?: string;
+  /** Body asserts: line diff, expected → actual. */
+  diff?: DiffRow[];
+}
 export interface HurlEntryReport {
   index: number;
   line: number;
-  asserts: Array<{ success: boolean; line: number; message?: string; source?: string }>;
+  asserts: HurlAssertReport[];
   captures: Array<{ name: string; value: unknown }>;
   calls: HurlCall[];
   time: number;

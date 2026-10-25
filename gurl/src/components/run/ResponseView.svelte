@@ -5,6 +5,7 @@
   import Waterfall from "./Waterfall.svelte";
   import JsonTree from "./JsonTree.svelte";
   import QueryBar from "./QueryBar.svelte";
+  import DiffView from "./DiffView.svelte";
   import { getResponseBody, getResponseBodyBytes, queryBody, queryText, type QueryKind, type QueryOutcome } from "../../lib/api";
   import { STATUS_TEXT } from "../../lib/hurl-schema";
   import { bytes, ms, prettyJson } from "../../lib/format";
@@ -24,7 +25,7 @@
   } from "../../lib/assert-gen";
   import { ASSERT_TARGET, type AssertItems, type AssertTarget } from "../../lib/assert-target";
   import { ui, type MenuItem } from "../../lib/stores/ui.svelte";
-  import type { HurlCall, HurlEntryReport, QueryM } from "../../lib/types";
+  import type { HurlAssertReport, HurlCall, HurlEntryReport, QueryM } from "../../lib/types";
 
   interface Props {
     entry: HurlEntryReport;
@@ -145,8 +146,31 @@
   }
 
   /** The body section, `body ==` and the like: HURL compares those with the response text exactly. */
-  const isBodyAssert = (a: { source?: string }) =>
-    /^(```|\{|\[[^A-Z]|<|body\b|base64,|hex,|file,)/.test(a.source ?? "");
+  const isBodyAssert = (a: HurlAssertReport) =>
+    a.kind === "body" || /^(```|\{|\[[^A-Z]|<|body\b|base64,|hex,|file,)/.test(a.source ?? "");
+
+  /** For a failed body assert, a one-line reading of the diff when the texts are "almost" equal. */
+  function bodyMismatch(a: HurlAssertReport): string | null {
+    if (a.kind !== "body" || a.actual == null || a.expected == null) return null;
+    const squash = (s: string) => s.replace(/\s+/g, "");
+    if (a.actual.trimEnd() === a.expected.trimEnd()) return "The bodies differ only by the final newline";
+    if (squash(a.actual) === squash(a.expected)) return "The bodies differ only in whitespace";
+    try {
+      if (deepEqual(JSON.parse(a.actual), JSON.parse(a.expected))) return "The bodies are equal as JSON but not as text (key order or formatting)";
+    } catch {
+      /* not JSON */
+    }
+    return null;
+  }
+  function deepEqual(x: unknown, y: unknown): boolean {
+    if (x === y) return true;
+    if (typeof x !== "object" || typeof y !== "object" || x === null || y === null) return false;
+    if (Array.isArray(x) !== Array.isArray(y)) return false;
+    const kx = Object.keys(x as object);
+    const ky = Object.keys(y as object);
+    if (kx.length !== ky.length) return false;
+    return kx.every((k) => deepEqual((x as Record<string, unknown>)[k], (y as Record<string, unknown>)[k]));
+  }
 
   /** The context menu for anything assertable: suggestions, capture, copy. */
   function openMenu(e: MouseEvent, suggestions: Suggestion[], extra: { captureQuery?: QueryM; copy?: Array<[string, string]> } = {}) {
@@ -337,14 +361,31 @@
             <li class:bad={!a.success}>
               <Icon name={a.success ? "check" : "x"} size={13} />
               <div class="a-main">
-                <code class="cond mono">{a.source ?? `line ${a.line}`}</code>
-                {#if a.message}<pre class="mono msg">{a.message}</pre>{/if}
-                {#if !a.success && isBodyAssert(a)}
-                  <p class="hint subtle">
-                    HURL compares the expected body with the response text byte for byte, including whitespace and the final newline.
-                    For structural checks use <code class="mono">jsonpath</code> asserts from the body tab{#if canAdd}, or
-                    <button class="link" onclick={expectBody}>expect this response</button> exactly{/if}.
-                  </p>
+                <code class="cond mono">{a.kind === "body" ? "Body" : (a.source ?? `line ${a.line}`)}</code>
+                {#if !a.success}
+                  {@const why = bodyMismatch(a)}
+                  {#if a.diff}
+                    {#if why}
+                      <p class="hint subtle">
+                        {why}. HURL compares body sections byte for byte; for structural checks use <code class="mono">jsonpath</code> asserts from the
+                        body tab{#if canAdd}, or <button class="link" onclick={expectBody}>expect this response</button> exactly{/if}.
+                      </p>
+                    {/if}
+                    <DiffView rows={a.diff} />
+                  {:else if a.actual != null || a.expected != null || a.reason}
+                    <table class="ae mono">
+                      <tbody>
+                        {#if a.reason}<tr><th>why</th><td class="bad-text">{a.reason}</td></tr>{/if}
+                        {#if a.expected != null}<tr><th>expected</th><td>{a.expected}</td></tr>{/if}
+                        {#if a.actual != null}<tr><th>actual</th><td class="bad-text">{a.actual}</td></tr>{/if}
+                      </tbody>
+                    </table>
+                    {#if isBodyAssert(a) && canAdd}
+                      <p class="hint subtle"><button class="link" onclick={expectBody}>Expect this response</button> as the body, byte for byte.</p>
+                    {/if}
+                  {:else if a.message}
+                    <pre class="mono msg">{a.message}</pre>
+                  {/if}
                 {/if}
               </div>
               <span class="ln subtle">line {a.line}</span>
@@ -580,6 +621,27 @@
     margin: 4px 0 0;
     white-space: pre-wrap;
     color: var(--fg-muted);
+  }
+  .ae {
+    margin: 6px 0 0;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+  .ae th {
+    text-align: left;
+    font-weight: 500;
+    color: var(--fg-muted);
+    padding: 1px 12px 1px 0;
+    vertical-align: top;
+    white-space: nowrap;
+  }
+  .ae td {
+    padding: 1px 0;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+  .bad-text {
+    color: var(--danger);
   }
   .hint {
     margin: 6px 0 0;

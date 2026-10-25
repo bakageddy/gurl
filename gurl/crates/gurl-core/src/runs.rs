@@ -506,4 +506,44 @@ mod tests {
         }
         let _ = std::fs::remove_dir_all(&root);
     }
+
+    #[test]
+    fn failed_asserts_carry_structured_details() {
+        let port = mock_server();
+        let text = format!(
+            "GET http://127.0.0.1:{port}/\nHTTP 200\n[Asserts]\nstatus == 201\njsonpath \"$.n\" == 4\n```json\n{{\"name\":\"gurl\",\"n\":3}}\n```\n"
+        );
+        let (run, _) = hurl::run(Source::Text(text, None), &HurlRunOptions::default(), &[]);
+        assert!(!run.ok);
+        // Rendered like HURL's CLI, not a Debug dump.
+        assert!(run.error.as_deref().unwrap().contains("Assert failure"));
+        let asserts = run.report.as_ref().unwrap()["entries"][0]["asserts"]
+            .as_array()
+            .unwrap()
+            .clone();
+        let by_source = |s: &str| {
+            asserts
+                .iter()
+                .find(|a| a["source"].as_str().is_some_and(|x| x.starts_with(s)))
+                .unwrap()
+                .clone()
+        };
+        // `HTTP 200` is one row (version + status merged).
+        assert_eq!(asserts.iter().filter(|a| a["line"] == 2).count(), 1);
+        let status = by_source("status == 201");
+        assert_eq!(status["success"], false);
+        assert_eq!(status["kind"], "explicit");
+        assert_eq!(status["actual"], "integer <200>");
+        assert_eq!(status["expected"], "integer <201>");
+        let n = by_source("jsonpath");
+        assert_eq!(n["kind"], "explicit");
+        assert_eq!(n["actual"], "integer <3>");
+        assert_eq!(n["expected"], "integer <4>");
+        // HURL anchors a fenced body assert on its first content line.
+        let body = by_source("{\"name\"");
+        assert_eq!(body["kind"], "body");
+        let diff = body["diff"].as_array().unwrap();
+        assert!(diff.iter().any(|r| r["op"] == "del"));
+        assert!(diff.iter().any(|r| r["op"] == "ins" && r["noEol"] == true));
+    }
 }
