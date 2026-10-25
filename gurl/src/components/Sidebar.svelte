@@ -37,7 +37,7 @@
   function activate(r: Row) {
     workspace.selected = r.node.path;
     if (r.node.kind === "dir") void workspace.toggle(r.node.path);
-    else if (r.node.kind === "env") tabs.openVars(r.node.path.slice(0, r.node.path.length - r.node.name.length - 1));
+    else if (r.node.kind === "env" || r.node.kind === "headers") tabs.openVars(r.node.path.slice(0, r.node.path.length - r.node.name.length - 1));
     else void tabs.openFile(r.node.path);
   }
 
@@ -50,7 +50,7 @@
         { label: "New scenario…", action: () => newScenario(p) },
         { label: "New folder…", action: () => newFolder(p) },
         { label: "Import here…", action: () => openImport(p) },
-        { label: "Variables…", action: () => tabs.openVars(p) },
+        { label: "Variables & headers…", action: () => tabs.openVars(p) },
         { label: "", action: () => {}, separator: true },
         { label: "Run this folder", action: () => runDirectory(p, false) },
         { label: "Run folder recursively", action: () => runDirectory(p, true) },
@@ -68,7 +68,7 @@
         { label: "Delete", action: () => deleteEntry(p), danger: true },
       ];
     } else {
-      items = [{ label: "Delete variables file", action: () => deleteEntry(p), danger: true }];
+      items = [{ label: r.node.kind === "headers" ? "Delete headers file" : "Delete variables file", action: () => deleteEntry(p), danger: true }];
     }
     ui.openMenu(e, items);
   }
@@ -79,7 +79,7 @@
       { label: "New scenario…", action: () => newScenario(workspace.root) },
       { label: "New folder…", action: () => newFolder(workspace.root) },
       { label: "Import…", action: () => openImport(workspace.root) },
-      { label: "Variables…", action: () => tabs.openVars(workspace.root!) },
+      { label: "Variables & headers…", action: () => tabs.openVars(workspace.root!) },
       { label: "Run workspace", action: () => runDirectory(workspace.root!, true) },
     ]);
   }
@@ -108,7 +108,7 @@
         <span>{basename(workspace.root)}</span>
         <span class="subtle mono">{total}</span>
       </button>
-      <button class="icon-btn" title="Workspace variables (gurl.env)" onclick={() => tabs.openVars(workspace.root!)}><Icon name="key" size={13} /></button>
+      <button class="icon-btn" title="Workspace variables and headers" onclick={() => tabs.openVars(workspace.root!)}><Icon name="key" size={13} /></button>
       </div>
       <div
         class="tree"
@@ -136,6 +136,8 @@
                 <Icon name={workspace.expanded[r.node.path] ? "folder-open" : "folder"} size={14} class="ic dir" />
               {:else if r.node.kind === "env"}
                 <span class="chev"></span><Icon name="key" size={14} class="ic env" />
+              {:else if r.node.kind === "headers"}
+                <span class="chev"></span><Icon name="list" size={14} class="ic env" />
               {:else}
                 <span class="chev"></span><Icon name="file" size={14} class="ic" />
               {/if}
@@ -143,8 +145,8 @@
               {#if r.node.kind === "dir"}
                 <button
                   class="icon-btn vars-btn"
-                  class:has={r.node.hasEnv}
-                  title={r.node.hasEnv ? "Edit variables (gurl.env)" : "Add variables (gurl.env)"}
+                  class:has={r.node.hasEnv || r.node.hasHeaders}
+                  title={r.node.hasEnv || r.node.hasHeaders ? "Edit variables and headers" : "Add variables or headers"}
                   onclick={(e) => { e.stopPropagation(); tabs.openVars(r.node.path); }}
                 ><Icon name="key" size={12} /></button>
               {/if}
@@ -158,7 +160,7 @@
     {:else}
       <div class="welcome">
         <Icon name="folder" size={28} />
-        <p>Open a folder to use it as a workspace. Every folder can hold scenarios and a <code>gurl.env</code> with variables for itself and its sub-folders.</p>
+        <p>Open a folder to use it as a workspace. Every folder can hold scenarios, a <code>gurl.env</code> with variables and a <code>gurl.headers</code> with headers for itself and its sub-folders.</p>
         <button class="btn primary" onclick={openWorkspaceDialog}>Open folder…</button>
       </div>
     {/if}

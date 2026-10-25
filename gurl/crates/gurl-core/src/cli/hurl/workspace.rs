@@ -1,18 +1,48 @@
-//! gURL extra for `gurl cli`: variables from the workspace's `gurl.env` files.
+//! gURL extras for `gurl cli`: variables from the workspace's `gurl.env` files and headers from its
+//! `gurl.headers` files.
 //!
-//! Precedence, lowest to highest: `gurl.env` chain (root → file directory) < hurl config file <
+//! Variables, lowest to highest: `gurl.env` chain (root → file directory) < hurl config file <
 //! `HURL_*` environment < `--variables-file` < `--variable` / `--secret`. The last four are already
 //! merged in [`CliOptions::variables`] / [`CliOptions::secrets`] by the option parser, so this module
 //! only has to seed the set and let those override.
+//!
+//! Headers: the `gurl.headers` chain (rendered with the file's variables) comes before `--header`,
+//! so a command-line header wins over the workspace, which wins over the file.
 
 use std::path::{Path, PathBuf};
 
 use hurl::runner::VariableSet;
 use hurl_core::input::{Input, InputKind};
 
+use super::error::CliError;
 use super::options::CliOptions;
-use crate::hurl::parse_value;
-use crate::workspace::{ENV_FILE, effective_vars};
+use crate::hurl::{parse_value, render_template};
+use crate::workspace::{ENV_FILE, HEADERS_FILE, effective_headers, effective_vars};
+
+/// The options to run `input` with: the given ones plus the workspace's `gurl.headers`, rendered
+/// with `variables`, ahead of the command line's `--header`s.
+pub fn options_for(
+    input: &Input,
+    options: &CliOptions,
+    variables: &VariableSet,
+) -> Result<CliOptions, CliError> {
+    let Some((root, dir)) = scope_of(input, options) else {
+        return Ok(options.clone());
+    };
+    let Ok(headers) = effective_headers(&root, &dir) else {
+        return Ok(options.clone());
+    };
+    let mut rendered = Vec::with_capacity(headers.len() + options.headers.len());
+    for h in headers {
+        let value = render_template(&h.value, variables)
+            .map_err(|e| CliError::InvalidOption(format!("{HEADERS_FILE}: {}: {e}", h.name)))?;
+        rendered.push(format!("{}: {value}", h.name));
+    }
+    rendered.extend(options.headers.iter().cloned());
+    let mut out = options.clone();
+    out.headers = rendered;
+    Ok(out)
+}
 
 /// Builds the variable set for one input file: workspace variables first, then everything the
 /// command line defined on top.
@@ -67,10 +97,11 @@ fn absolute_parent(path: &Path) -> Option<PathBuf> {
     Some(std::fs::canonicalize(&dir).unwrap_or(dir))
 }
 
-/// Walks up from `dir` and returns the topmost ancestor (inclusive) that holds a `gurl.env`.
+/// Walks up from `dir` and returns the topmost ancestor (inclusive) that holds a `gurl.env` or a
+/// `gurl.headers`.
 fn discover_root(dir: &Path) -> Option<PathBuf> {
     dir.ancestors()
-        .filter(|d| d.join(ENV_FILE).is_file())
+        .filter(|d| d.join(ENV_FILE).is_file() || d.join(HEADERS_FILE).is_file())
         .last()
         .map(Path::to_path_buf)
 }
@@ -111,6 +142,36 @@ mod tests {
         options.no_workspace = true;
         let vars = variables_for(&Input::new(&file.to_string_lossy()), &options);
         assert!(vars.get("host").is_none());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn workspace_headers_are_rendered_and_sit_below_cli_headers() {
+        let root = tmp("headers");
+        let sub = root.join("api");
+        std::fs::create_dir_all(&sub).unwrap();
+        std::fs::write(root.join(ENV_FILE), "token=abc\n").unwrap();
+        std::fs::write(
+            root.join(HEADERS_FILE),
+            "Authorization: Bearer {{token}}\nX-Trace: root\n",
+        )
+        .unwrap();
+        std::fs::write(sub.join(HEADERS_FILE), "X-Trace: api\n").unwrap();
+        let file = sub.join("a.hurl");
+        std::fs::write(&file, "GET http://x\n").unwrap();
+        let input = Input::new(&file.to_string_lossy());
+
+        let mut options = CliOptions::default();
+        options.headers.push("X-Cli: 1".to_string());
+        let variables = variables_for(&input, &options);
+        let per_file = options_for(&input, &options, &variables).unwrap();
+        assert_eq!(
+            per_file.headers,
+            ["Authorization: Bearer abc", "X-Trace: api", "X-Cli: 1"]
+        );
+
+        std::fs::write(root.join(HEADERS_FILE), "X-Key: {{nope}}\n").unwrap();
+        assert!(options_for(&input, &options, &variables).is_err());
         let _ = std::fs::remove_dir_all(&root);
     }
 

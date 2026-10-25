@@ -2,6 +2,7 @@ import { Channel, invoke } from "@tauri-apps/api/core";
 import type {
   AssertM,
   CaptureM,
+  EffectiveHeader,
   EffectiveVar,
   EnvVar,
   FileRun,
@@ -40,6 +41,11 @@ export const setEnvText = (dir: string, text: string) =>
   invoke<void>("set_env_text", { dir, text });
 export const getEffectiveVars = (dir: string) =>
   invoke<EffectiveVar[]>("get_effective_vars", { dir });
+export const getHeadersText = (dir: string) => invoke<string>("get_headers_text", { dir });
+export const setHeadersText = (dir: string, text: string) =>
+  invoke<void>("set_headers_text", { dir, text });
+export const getEffectiveHeaders = (dir: string) =>
+  invoke<EffectiveHeader[]>("get_effective_headers", { dir });
 
 export const readTextFile = (path: string) => invoke<string>("read_text_file", { path });
 export const writeTextFile = (path: string, content: string) =>

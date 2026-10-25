@@ -93,8 +93,9 @@ export interface ParseOutcome {
 export interface TreeNode {
   name: string;
   path: string;
-  kind: "dir" | "hurl" | "env";
+  kind: "dir" | "hurl" | "env" | "headers";
   hasEnv: boolean;
+  hasHeaders: boolean;
 }
 export interface WorkspaceInfo {
   root: string;
@@ -107,6 +108,12 @@ export interface EnvVar {
   secret: boolean;
 }
 export interface EffectiveVar extends EnvVar {
+  sourceDir: string;
+  overrides: string[];
+}
+export interface EffectiveHeader {
+  name: string;
+  value: string;
   sourceDir: string;
   overrides: string[];
 }

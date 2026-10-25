@@ -11,16 +11,40 @@ type Result<T> = std::result::Result<T, WorkspaceError>;
 
 pub const MAX_DEPTH: usize = 255;
 pub const ENV_FILE: &str = "gurl.env";
+/// Headers added to every request of the folder's scenarios and sub-folders (`Name: value` lines,
+/// values may use `{{var}}`). A deeper folder overrides a header of the same name.
+pub const HEADERS_FILE: &str = "gurl.headers";
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Node {
     pub name: String,
     pub path: String,
-    /// `dir`, `hurl` or `env`.
+    /// `dir`, `hurl`, `env` or `headers`.
     pub kind: &'static str,
     /// For dirs: whether the dir contains a `gurl.env`.
     pub has_env: bool,
+    /// For dirs: whether the dir contains a `gurl.headers`.
+    pub has_headers: bool,
+}
+
+/// One line of a `gurl.headers` file.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct HeaderLine {
+    pub name: String,
+    pub value: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EffectiveHeader {
+    pub name: String,
+    pub value: String,
+    /// Directory whose `gurl.headers` defines the winning value.
+    pub source_dir: String,
+    /// Directories further up that define the same header and are overridden.
+    pub overrides: Vec<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -84,7 +108,8 @@ fn sort_nodes(nodes: &mut [Node]) {
         let rank = |n: &Node| match n.kind {
             "dir" => 0,
             "env" => 1,
-            _ => 2,
+            "headers" => 2,
+            _ => 3,
         };
         rank(a)
             .cmp(&rank(b))
@@ -115,17 +140,21 @@ pub fn list_dir(root: &Path, dir: &Path) -> Result<Vec<Node>> {
             "dir"
         } else if name == ENV_FILE {
             "env"
+        } else if name == HEADERS_FILE {
+            "headers"
         } else if is_hurl(&name) {
             "hurl"
         } else {
             continue;
         };
         let has_env = kind == "dir" && path.join(ENV_FILE).is_file();
+        let has_headers = kind == "dir" && path.join(HEADERS_FILE).is_file();
         nodes.push(Node {
             name,
             path: path.to_string_lossy().to_string(),
             kind,
             has_env,
+            has_headers,
         });
     }
     sort_nodes(&mut nodes);
@@ -238,6 +267,73 @@ pub fn effective_vars(root: &Path, dir: &Path) -> Result<Vec<EffectiveVar>> {
                     name: v.name,
                     value: v.value,
                     secret: v.secret,
+                    source_dir: d_str.clone(),
+                    overrides: vec![],
+                });
+            }
+        }
+    }
+    Ok(out)
+}
+
+// ------------------------------------------------------------ headers files
+
+/// Parses `gurl.headers`: `Name: value` per line, `#` comments and blank lines ignored. A line
+/// without `:` is skipped (the editor shows the raw text, so nothing is silently rewritten).
+pub fn parse_headers(text: &str) -> Vec<HeaderLine> {
+    text.lines()
+        .map(str::trim)
+        .filter(|t| !t.is_empty() && !t.starts_with('#'))
+        .filter_map(|t| t.split_once(':'))
+        .filter(|(k, _)| !k.trim().is_empty())
+        .map(|(k, v)| HeaderLine {
+            name: k.trim().to_string(),
+            value: v.trim().to_string(),
+        })
+        .collect()
+}
+
+pub fn read_headers(dir: &Path) -> Vec<HeaderLine> {
+    std::fs::read_to_string(dir.join(HEADERS_FILE))
+        .map(|t| parse_headers(&t))
+        .unwrap_or_default()
+}
+
+/// Raw text of a directory's `gurl.headers` (empty when there is none).
+pub fn read_headers_text(root: &Path, dir: &Path) -> Result<String> {
+    let dir = contain(root, dir)?;
+    Ok(std::fs::read_to_string(dir.join(HEADERS_FILE)).unwrap_or_default())
+}
+
+/// Writes raw `gurl.headers` text; blank text removes the file.
+pub fn write_headers_text(root: &Path, dir: &Path, text: &str) -> Result<()> {
+    let dir = contain(root, dir)?;
+    let file = dir.join(HEADERS_FILE);
+    if text.trim().is_empty() {
+        if file.exists() {
+            std::fs::remove_file(&file).map_err(WorkspaceError::io("cannot remove", &file))?;
+        }
+        return Ok(());
+    }
+    std::fs::write(&file, text).map_err(WorkspaceError::io("cannot write", &file))
+}
+
+/// Headers added to requests of scenarios in `dir`: root first, each deeper `gurl.headers`
+/// overriding by (case-insensitive) name.
+pub fn effective_headers(root: &Path, dir: &Path) -> Result<Vec<EffectiveHeader>> {
+    let mut out: Vec<EffectiveHeader> = Vec::new();
+    for d in chain(root, dir)? {
+        let d_str = d.to_string_lossy().to_string();
+        for h in read_headers(&d) {
+            if let Some(existing) = out.iter_mut().find(|e| e.name.eq_ignore_ascii_case(&h.name)) {
+                existing.overrides.push(existing.source_dir.clone());
+                existing.name = h.name;
+                existing.value = h.value;
+                existing.source_dir = d_str.clone();
+            } else {
+                out.push(EffectiveHeader {
+                    name: h.name,
+                    value: h.value,
                     source_dir: d_str.clone(),
                     overrides: vec![],
                 });
@@ -468,6 +564,42 @@ mod tests {
         assert_eq!(host.value, "b");
         assert_eq!(host.overrides.len(), 2);
         assert!(vars.iter().any(|v| v.name == "root_only"));
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn headers_parse_and_child_overrides_parent_case_insensitively() {
+        assert_eq!(
+            parse_headers("# auth\nAuthorization: Bearer {{token}}\n\nbad line\nX-Empty:\n"),
+            vec![
+                HeaderLine {
+                    name: "Authorization".into(),
+                    value: "Bearer {{token}}".into()
+                },
+                HeaderLine {
+                    name: "X-Empty".into(),
+                    value: String::new()
+                }
+            ]
+        );
+        let root = tmp("headers");
+        let child = root.join("a");
+        std::fs::create_dir_all(&child).unwrap();
+        std::fs::write(
+            root.join(HEADERS_FILE),
+            "Authorization: Bearer root\nX-Trace: 1\n",
+        )
+        .unwrap();
+        std::fs::write(child.join(HEADERS_FILE), "authorization: Bearer a\n").unwrap();
+        let hs = effective_headers(&root, &child).unwrap();
+        assert_eq!(hs.len(), 2);
+        assert_eq!(hs[0].name, "authorization");
+        assert_eq!(hs[0].value, "Bearer a");
+        assert_eq!(hs[0].overrides.len(), 1);
+        assert_eq!(hs[1].name, "X-Trace");
+        let nodes = list_dir(&root, &root).unwrap();
+        assert!(nodes.iter().any(|n| n.kind == "headers"));
+        assert!(nodes.iter().any(|n| n.kind == "dir" && n.has_headers));
         let _ = std::fs::remove_dir_all(&root);
     }
 

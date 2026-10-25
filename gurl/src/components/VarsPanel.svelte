@@ -1,13 +1,13 @@
 <script lang="ts">
   import { untrack } from "svelte";
   import Icon from "./Icon.svelte";
-  import { getDirVars, getEffectiveVars, getEnvText, setDirVars, setEnvText } from "../lib/api";
+  import { getDirVars, getEffectiveHeaders, getEffectiveVars, getEnvText, getHeadersText, setDirVars, setEnvText, setHeadersText } from "../lib/api";
   import LazyEditor from "./LazyEditor.svelte";
   import { depthOf } from "../lib/actions";
   import { basename, debounce, relative } from "../lib/format";
   import { workspace } from "../lib/stores/workspace.svelte";
   import { ui } from "../lib/stores/ui.svelte";
-  import type { EffectiveVar, EnvVar } from "../lib/types";
+  import type { EffectiveHeader, EffectiveVar, EnvVar } from "../lib/types";
 
   let { dir }: { dir: string } = $props();
 
@@ -17,6 +17,21 @@
   let saving = $state(false);
   let mode = $state<"table" | "text">("table");
   let text = $state("");
+  let headersText = $state("");
+  let effectiveHeaders = $state<EffectiveHeader[]>([]);
+  const headersHere = $derived(parseHeaderNames(headersText));
+  const inheritedHeaders = $derived(effectiveHeaders.filter((h) => !headersHere.has(h.name.toLowerCase())));
+
+  function parseHeaderNames(t: string) {
+    const names = new Set<string>();
+    for (const line of t.split("\n")) {
+      const s = line.trim();
+      if (!s || s.startsWith("#")) continue;
+      const i = s.indexOf(":");
+      if (i > 0) names.add(s.slice(0, i).trim().toLowerCase());
+    }
+    return names;
+  }
 
   const localNames = $derived(new Set(local.map((v) => v.name.trim()).filter(Boolean)));
   const inherited = $derived(effective.filter((v) => !localNames.has(v.name)));
@@ -27,6 +42,8 @@
       local = await getDirVars(dir);
       effective = await getEffectiveVars(dir);
       text = await getEnvText(dir);
+      headersText = await getHeadersText(dir);
+      effectiveHeaders = await getEffectiveHeaders(dir);
       loaded = true;
     } catch (e) {
       ui.error(e);
@@ -58,6 +75,19 @@
       effective = await getEffectiveVars(dir);
       local = await getDirVars(dir);
       await workspace.refresh([dir.slice(0, Math.max(dir.lastIndexOf("/"), dir.lastIndexOf("\\")))]);
+    } catch (e) {
+      ui.error(e);
+    } finally {
+      saving = false;
+    }
+  }, 500);
+
+  const saveHeaders = debounce(async () => {
+    saving = true;
+    try {
+      await setHeadersText(dir, headersText);
+      effectiveHeaders = await getEffectiveHeaders(dir);
+      await workspace.refresh([dir, dir.slice(0, Math.max(dir.lastIndexOf("/"), dir.lastIndexOf("\\")))]);
     } catch (e) {
       ui.error(e);
     } finally {
@@ -150,6 +180,36 @@
       {/each}
     </div>
   {/if}
+
+  <h2 class="section">Headers</h2>
+  <p class="hint muted">
+    Defined in this folder's <code>gurl.headers</code>, one <code>Name: value</code> per line; <code>#</code> starts a comment.
+    They are added to every request of the scenarios here and in all sub-folders, like hurl's <code>--header</code>:
+    a header in a scenario with the same name is replaced, a sub-folder overrides a parent's header by name. Values
+    may use <code>{"{{name}}"}</code> variables (plain names only, no functions or filters); an undefined variable fails
+    the run instead of sending the placeholder.
+  </p>
+  <div class="cm">
+    <LazyEditor
+      value={headersText}
+      lang="plain"
+      placeholder={"Authorization: Bearer {{token}}\nAccept: application/json"}
+      onchange={(v) => { headersText = v; saveHeaders(); }}
+    />
+  </div>
+  {#if inheritedHeaders.length}
+    <h3 class="label">Inherited from parent folders</h3>
+    <div class="table">
+      {#each inheritedHeaders as h (h.name)}
+        <div class="row inh">
+          <span class="mono name">{h.name}</span>
+          <span class="mono val">{h.value}</span>
+          <span class="subtle src">from {rel(h.sourceDir) || "(root)"}</span>
+          <button class="btn sm" onclick={() => { headersText = `${headersText.trimEnd()}${headersText.trim() ? "\n" : ""}${h.name}: ${h.value}\n`; saveHeaders(); }}>Override</button>
+        </div>
+      {/each}
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -183,6 +243,11 @@
   }
   h3 {
     margin: 18px 0 8px;
+  }
+  h2.section {
+    margin: 28px 0 0;
+    padding-top: 18px;
+    border-top: 1px solid var(--border-muted);
   }
   .table {
     display: grid;

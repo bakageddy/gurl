@@ -2,7 +2,7 @@
 //! history and exporting HURL's own reports.
 
 use crate::error::RunError;
-use crate::hurl::{self, Executed, FileRun, HurlRunOptions, Source, VarSpec};
+use crate::hurl::{self, Executed, FileRun, HeaderSpec, HurlRunOptions, Source, VarSpec};
 use crate::workspace;
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
@@ -98,11 +98,12 @@ fn new_run_id() -> String {
     format!("run-{nanos:x}")
 }
 
-fn env_for(root: Option<&Path>, file: &Path) -> Vec<VarSpec> {
+/// Workspace variables (`gurl.env` chain) and headers (`gurl.headers` chain) that apply to `file`.
+fn scope_for(root: Option<&Path>, file: &Path) -> (Vec<VarSpec>, Vec<HeaderSpec>) {
     let (Some(root), Some(dir)) = (root, file.parent()) else {
-        return vec![];
+        return (vec![], vec![]);
     };
-    workspace::effective_vars(root, dir)
+    let vars = workspace::effective_vars(root, dir)
         .map(|vars| {
             vars.into_iter()
                 .map(|v| VarSpec {
@@ -112,7 +113,18 @@ fn env_for(root: Option<&Path>, file: &Path) -> Vec<VarSpec> {
                 })
                 .collect()
         })
-        .unwrap_or_default()
+        .unwrap_or_default();
+    let headers = workspace::effective_headers(root, dir)
+        .map(|hs| {
+            hs.into_iter()
+                .map(|h| HeaderSpec {
+                    name: h.name,
+                    value: h.value,
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    (vars, headers)
 }
 
 impl RunStore {
@@ -211,8 +223,8 @@ impl RunStore {
                             Some(d) => PathBuf::from(d).join("request.hurl"),
                             None => path.clone(),
                         };
-                        let env = env_for(root.as_deref(), &env_path);
-                        let out = hurl::run(source, &req.options, &env);
+                        let (env, headers) = scope_for(root.as_deref(), &env_path);
+                        let out = hurl::run(source, &req.options, &env, &headers);
                         on_event(RunEvent::FileFinished {
                             index: i,
                             run: out.0.clone(),
@@ -449,6 +461,72 @@ mod tests {
         port
     }
 
+    /// Echoes the request headers back as JSON (`{"headers": {"name": "value", ...}}`).
+    fn echo_server() -> u16 {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        std::thread::spawn(move || {
+            for stream in listener.incoming().flatten() {
+                let mut stream = stream;
+                let mut buf = [0u8; 8192];
+                let n = stream.read(&mut buf).unwrap_or(0);
+                let req = String::from_utf8_lossy(&buf[..n]).to_string();
+                let headers: Vec<String> = req
+                    .split("\r\n")
+                    .skip(1)
+                    .take_while(|l| !l.is_empty())
+                    .filter_map(|l| l.split_once(':'))
+                    .map(|(k, v)| {
+                        format!("\"{}\":\"{}\"", k.trim().to_lowercase(), v.trim())
+                    })
+                    .collect();
+                let body = format!("{{\"headers\":{{{}}}}}", headers.join(","));
+                let _ = write!(
+                    stream,
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()
+                );
+            }
+        });
+        port
+    }
+
+    #[test]
+    fn workspace_headers_are_sent_templated_and_override_the_file() {
+        let port = echo_server();
+        let root = std::env::temp_dir().join(format!("gurl-hdr-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let sub = root.join("api");
+        std::fs::create_dir_all(&sub).unwrap();
+        std::fs::write(root.join("gurl.env"), "token=abc\n").unwrap();
+        std::fs::write(
+            root.join("gurl.headers"),
+            "Authorization: Bearer {{token}}\nX-Trace: root\n",
+        )
+        .unwrap();
+        std::fs::write(sub.join("gurl.headers"), "x-trace: api\n").unwrap();
+        let file = sub.join("a.hurl");
+        std::fs::write(
+            &file,
+            format!(
+                "GET http://127.0.0.1:{port}/\nX-Trace: from-file\nHTTP 200\n[Asserts]\njsonpath \"$.headers.authorization\" == \"Bearer abc\"\njsonpath \"$.headers['x-trace']\" == \"api\"\n"
+            ),
+        )
+        .unwrap();
+        let (env, headers) = scope_for(Some(&root), &file);
+        assert_eq!(headers.len(), 2);
+        let (run, _) = hurl::run(Source::File(file.clone()), &HurlRunOptions::default(), &env, &headers);
+        assert!(run.ok, "{:?}", run.error);
+
+        // An undefined variable in a header is an error, not a literal `{{...}}` on the wire.
+        std::fs::write(root.join("gurl.headers"), "X-Api-Key: {{missing}}\n").unwrap();
+        let (env, headers) = scope_for(Some(&root), &file);
+        let (run, _) = hurl::run(Source::File(file), &HurlRunOptions::default(), &env, &headers);
+        assert!(!run.ok);
+        assert!(run.error.unwrap().contains("missing"));
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
     #[test]
     fn dir_run_uses_inherited_vars_and_exports_reports() {
         let port = mock_server();
@@ -474,10 +552,10 @@ mod tests {
 
         let store = RunStore::default();
         // `Channel` can only be built by Tauri's IPC; exercise the pieces it wraps instead.
-        let env = env_for(Some(&root), &files[0]);
+        let (env, headers) = scope_for(Some(&root), &files[0]);
         assert!(env.iter().any(|v| v.name == "name" && v.value == "gurl"));
         let opts = HurlRunOptions::default();
-        let (run_a, ex_a) = hurl::run(Source::File(files[0].clone()), &opts, &env);
+        let (run_a, ex_a) = hurl::run(Source::File(files[0].clone()), &opts, &env, &headers);
         assert!(run_a.ok, "{:?}", run_a.error);
         let asserts = &run_a.report.as_ref().unwrap()["entries"][0]["asserts"];
         assert!(asserts.as_array().unwrap().iter().any(|a| {
@@ -485,7 +563,7 @@ mod tests {
                 .as_str()
                 .is_some_and(|s| s.starts_with("jsonpath \"$.n\""))
         }));
-        let (run_b, ex_b) = hurl::run(Source::File(files[1].clone()), &opts, &env);
+        let (run_b, ex_b) = hurl::run(Source::File(files[1].clone()), &opts, &env, &headers);
         assert!(!run_b.ok);
 
         store.stored.lock().unwrap().push_back(StoredRun {
@@ -513,7 +591,7 @@ mod tests {
         let text = format!(
             "GET http://127.0.0.1:{port}/\nHTTP 200\n[Asserts]\nstatus == 201\njsonpath \"$.n\" == 4\n```json\n{{\"name\":\"gurl\",\"n\":3}}\n```\n"
         );
-        let (run, _) = hurl::run(Source::Text(text, None), &HurlRunOptions::default(), &[]);
+        let (run, _) = hurl::run(Source::Text(text, None), &HurlRunOptions::default(), &[], &[]);
         assert!(!run.ok);
         // Rendered like HURL's CLI, not a Debug dump.
         assert!(run.error.as_deref().unwrap().contains("Assert failure"));

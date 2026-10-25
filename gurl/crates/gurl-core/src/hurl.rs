@@ -198,6 +198,52 @@ pub struct VarSpec {
     pub secret: bool,
 }
 
+/// A header coming from a workspace `gurl.headers` chain; `value` may contain `{{var}}`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HeaderSpec {
+    pub name: String,
+    pub value: String,
+}
+
+/// Replaces `{{name}}` placeholders with the variables' values. Only plain variable names are
+/// supported here (no functions or filters); an unknown name is an error so a typo doesn't send a
+/// literal `{{token}}` to the server.
+pub fn render_template(text: &str, variables: &VariableSet) -> Result<String, String> {
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(start) = rest.find("{{") {
+        out.push_str(&rest[..start]);
+        let after = &rest[start + 2..];
+        let Some(end) = after.find("}}") else {
+            out.push_str(&rest[start..]);
+            return Ok(out);
+        };
+        let name = after[..end].trim();
+        let value = variables
+            .get(name)
+            .map(|v| v.value().to_string())
+            .ok_or_else(|| format!("variable {name} is not defined"))?;
+        out.push_str(&value);
+        rest = &after[end + 2..];
+    }
+    out.push_str(rest);
+    Ok(out)
+}
+
+/// Renders workspace headers into hurl's "add to every request" header list.
+fn build_headers(
+    headers: &[HeaderSpec],
+    variables: &VariableSet,
+) -> Result<hurl::http::HeaderVec, String> {
+    let mut out = hurl::http::HeaderVec::new();
+    for h in headers {
+        let value = render_template(&h.value, variables)
+            .map_err(|e| format!("gurl.headers: {}: {e}", h.name))?;
+        out.push(hurl::http::Header::new(&h.name, &value));
+    }
+    Ok(out)
+}
+
 /// Result of running one `.hurl` file or text snippet.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -226,11 +272,12 @@ pub enum Source {
 }
 
 /// Runs a source with `options` plus the workspace variables `env` (explicit
-/// `options.variables` win over `env`).
+/// `options.variables` win over `env`) and the workspace `headers` added to every request.
 pub fn run(
     source: Source,
     options: &HurlRunOptions,
     env: &[VarSpec],
+    headers: &[HeaderSpec],
 ) -> (FileRun, Option<Executed>) {
     let start = Instant::now();
     let label = match &source {
@@ -276,12 +323,16 @@ pub fn run(
         }
     };
 
-    let runner_options = match build_runner_options(options, context_dir) {
+    let variables = build_variables(env, &options.variables);
+    let secrets = variables.secrets();
+    let extra_headers = match build_headers(headers, &variables) {
+        Ok(h) => h,
+        Err(e) => return fail(e),
+    };
+    let runner_options = match build_runner_options(options, context_dir, extra_headers) {
         Ok(o) => o,
         Err(e) => return fail(chain_message(&e)),
     };
-    let variables = build_variables(env, &options.variables);
-    let secrets = variables.secrets();
     let logger_options = build_logger_options(&options.verbosity);
 
     let result = match hurl::runner::run(
@@ -342,11 +393,13 @@ fn count(name: &'static str, n: i32) -> Result<Count, RunError> {
 fn build_runner_options(
     options: &HurlRunOptions,
     context_dir: ContextDir,
+    headers: hurl::http::HeaderVec,
 ) -> Result<RunnerOptions, RunError> {
     let mut builder = RunnerOptionsBuilder::new();
 
     builder
         .context_dir(&context_dir)
+        .headers(headers)
         .allow_reuse(options.allow_reuse)
         .insecure(options.insecure)
         .compressed(options.compressed)
@@ -781,6 +834,25 @@ fn inject_assert_sources(json: &mut serde_json::Value, content: &str) {
             }
         }
         *asserts = merged;
+    }
+}
+
+#[cfg(test)]
+mod template_tests {
+    use super::*;
+
+    #[test]
+    fn renders_variables_and_rejects_unknown_ones() {
+        let mut vars = VariableSet::new();
+        vars.insert("token".to_string(), Value::String("abc".into()));
+        vars.insert("n".to_string(), parse_value("3"));
+        assert_eq!(
+            render_template("Bearer {{ token }} v{{n}}", &vars).unwrap(),
+            "Bearer abc v3"
+        );
+        assert_eq!(render_template("plain", &vars).unwrap(), "plain");
+        assert_eq!(render_template("open {{", &vars).unwrap(), "open {{");
+        assert!(render_template("{{nope}}", &vars).is_err());
     }
 }
 

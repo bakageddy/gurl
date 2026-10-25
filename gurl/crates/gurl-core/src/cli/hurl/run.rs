@@ -60,6 +60,7 @@ pub fn run_seq(
             }
         };
         let variables = workspace::variables_for(&filename, options);
+        let options = &workspace::options_for(&filename, options, &variables)?;
         let runner_options = options.to_runner_options(&filename, current_dir)?;
         let logger_options = options.to_logger_options();
 
@@ -188,6 +189,7 @@ pub fn run_par(
         .enumerate()
         .map(|(seq, input)| {
             let variables = workspace::variables_for(input, options);
+            let options = workspace::options_for(input, options, &variables)?;
             let runner_options = options.to_runner_options(input, current_dir)?;
             let logger_options = options.to_logger_options();
             Ok(Job::new(

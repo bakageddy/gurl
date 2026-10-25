@@ -8,6 +8,8 @@ A GUI for [HURL](https://hurl.dev), written in Tauri 2 (Rust) and Svelte 5. HURL
 - **Workspace support**: open a folder and organise `.hurl` scenarios in sub-folders.
 - **Variables per folder**: a `gurl.env` in any folder defines variables for its scenarios and every
   sub-folder; deeper folders override shallower ones. Secrets are redacted in logs and reports.
+- **Common headers per folder**: a `gurl.headers` (`Name: value` lines, values may use `{{var}}`) adds headers to
+  every request of its scenarios and sub-folders, like hurl's `--header`; deeper folders override by name.
 - **Quick request** (Ctrl/Cmd+K): a scratch tab with a URL bar; paste a cURL command into it and it becomes the
   request. Send, then "Save as…" into the workspace when it's worth keeping.
 - **Visual builder**: methods, query/form/**multipart** (files from the scenario's folder), cookies, basic auth,
@@ -60,9 +62,10 @@ pbpaste | gurl import curl -           # cURL / Postman / OpenCollection → HUR
 ```
 
 `gurl cli` adds the workspace to hurl: for each file it finds the topmost parent directory holding a `gurl.env`
-and applies the variables from there down to the file's directory (deeper overrides shallower, `# @secret`
-values are redacted), exactly as the app does. `--workspace <DIR>` sets the root explicitly, `--no-workspace`
-turns it off, and `--variable`/`--variables-file`/`HURL_VARIABLE_*` still win over `gurl.env`.
+or `gurl.headers` and applies the variables and headers from there down to the file's directory (deeper overrides
+shallower, `# @secret` values are redacted), exactly as the app does. `--workspace <DIR>` sets the root explicitly,
+`--no-workspace` turns it off; `--variable`/`--variables-file`/`HURL_VARIABLE_*` still win over `gurl.env` and
+`--header` over `gurl.headers`.
 
 Putting `gurl` on your PATH: Linux packages install `/usr/bin/gurl`. On macOS, `ln -s /Applications/gURL.app/Contents/MacOS/gurl /usr/local/bin/gurl`.
 On Windows, add the install directory to PATH; the terminal prompt may return before the output when the

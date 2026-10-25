@@ -70,7 +70,7 @@ gurl/
     cli/hurl/               `gurl cli`: hurl's CLI sources, forked (see cli/hurl/UPSTREAM.md) + workspace.rs
     cli/version.rs          `gurl --version`
     parse.rs / emit.rs      HURL text <-> structured model (model.rs) for the visual builder
-    workspace.rs            workspace tree, gurl.env variable inheritance, file ops, 255-level limit
+    workspace.rs            workspace tree, gurl.env / gurl.headers inheritance, file ops, 255-level limit
     runs.rs                 run scopes (text/file/dir), streaming, history, HURL report export
     hurl.rs                 runner options + one run, built on the hurl crate
     error.rs                WorkspaceError / RunError (thiserror)
@@ -90,9 +90,11 @@ packaging/                  desktop entry and Arch PKGBUILD
 
 ### Concepts worth knowing
 
-- **Workspace**: a folder tree up to 255 levels deep. Each folder can hold many `.hurl` scenarios and one
-  `gurl.env` (`name=value` lines, `# @secret` above a line marks a secret). A folder's variables apply to its
-  scenarios and all sub-folders; deeper folders override shallower ones.
+- **Workspace**: a folder tree up to 255 levels deep. Each folder can hold many `.hurl` scenarios, one
+  `gurl.env` (`name=value` lines, `# @secret` above a line marks a secret) and one `gurl.headers` (`Name: value`
+  lines, `{{var}}` allowed in values). Variables and headers apply to the folder's scenarios and all sub-folders;
+  deeper folders override shallower ones (headers by case-insensitive name). Headers go through hurl's
+  `RunnerOptions::headers`, the same path as `hurl --header`, after `{{var}}` rendering in `hurl.rs`.
 - **Builder <-> text**: both views edit one model. `parse_hurl` turns text into the model, `emit_hurl` turns it
   back. Leaf values stay raw HURL source, so `{{templates}}` and quoting survive. If you add support for new
   syntax, extend `model.rs`, `parse.rs`, `emit.rs` **and** add it to `crates/gurl-core/fixtures/all.hurl`; the

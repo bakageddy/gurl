@@ -12,7 +12,7 @@ mod error;
 
 use error::{Error, Result};
 use gurl_core::{edit, emit, import, model, parse, query, runs, workspace};
-use workspace::{EffectiveVar, EnvVar, Node};
+use workspace::{EffectiveHeader, EffectiveVar, EnvVar, Node};
 
 #[derive(Default)]
 struct AppState {
@@ -187,6 +187,28 @@ fn set_env_text(state: State<'_, AppState>, dir: String, text: String) -> Result
 #[command]
 fn get_effective_vars(state: State<'_, AppState>, dir: String) -> Result<Vec<EffectiveVar>> {
     Ok(workspace::effective_vars(&state.root()?, Path::new(&dir))?)
+}
+
+#[command]
+fn get_headers_text(state: State<'_, AppState>, dir: String) -> Result<String> {
+    Ok(workspace::read_headers_text(&state.root()?, Path::new(&dir))?)
+}
+
+#[command]
+fn set_headers_text(state: State<'_, AppState>, dir: String, text: String) -> Result<()> {
+    Ok(workspace::write_headers_text(
+        &state.root()?,
+        Path::new(&dir),
+        &text,
+    )?)
+}
+
+#[command]
+fn get_effective_headers(
+    state: State<'_, AppState>,
+    dir: String,
+) -> Result<Vec<EffectiveHeader>> {
+    Ok(workspace::effective_headers(&state.root()?, Path::new(&dir))?)
 }
 
 // Plain file access. Files inside the workspace are contained to it; files opened via the
@@ -490,6 +512,9 @@ pub fn run() {
             get_env_text,
             set_env_text,
             get_effective_vars,
+            get_headers_text,
+            set_headers_text,
+            get_effective_headers,
             read_text_file,
             write_text_file,
             open_file_dialog,

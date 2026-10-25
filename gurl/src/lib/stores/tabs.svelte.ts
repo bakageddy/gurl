@@ -193,7 +193,7 @@ export class VarsTab {
     this.id = `vars:${dir}`;
   }
   get title() {
-    return `${basename(this.dir)} · variables`;
+    return `${basename(this.dir)} · variables & headers`;
   }
 }
 

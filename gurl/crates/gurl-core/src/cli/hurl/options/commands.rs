@@ -714,9 +714,9 @@ pub fn workspace() -> clap::Arg {
         .long("workspace")
         .value_name("DIR")
         .help(
-            "Root of the gURL workspace: every gurl.env from DIR down to a file's directory \
-             defines variables for that file [default: topmost parent directory of each \
-             input file containing a gurl.env]",
+            "Root of the gURL workspace: every gurl.env (variables) and gurl.headers (headers \
+             added to every request) from DIR down to a file's directory applies to that file \
+             [default: topmost parent directory of each input file containing one of them]",
         )
         .help_heading("gURL options")
         .num_args(1)
@@ -726,7 +726,7 @@ pub fn workspace() -> clap::Arg {
 pub fn no_workspace() -> clap::Arg {
     clap::Arg::new("no_workspace")
         .long("no-workspace")
-        .help("Don't read any gurl.env file")
+        .help("Don't read any gurl.env or gurl.headers file")
         .help_heading("gURL options")
         .action(clap::ArgAction::SetTrue)
 }
